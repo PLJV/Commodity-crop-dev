@@ -1,0 +1,13 @@
+TARGET = pyrcc4
+TEMPLATE = app
+QT -= gui
+QT += xml
+CONFIG += warn_on release
+CONFIG -= app_bundle
+CONFIG -= android_install
+target.path = /System/Library/Frameworks/Python.framework/Versions/2.7/bin
+INSTALLS += target
+INCLUDEPATH += /Users/ktaylora/PLJV/tillage_likelihood_model/gui/PyQt4/pyrcc
+VPATH = /Users/ktaylora/PLJV/tillage_likelihood_model/gui/PyQt4/pyrcc
+HEADERS = rcc.h
+SOURCES = main.cpp rcc.cpp
