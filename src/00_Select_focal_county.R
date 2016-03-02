@@ -21,23 +21,28 @@ unpackCountiesZipfile <- function(x){
       o <- o[length(o)]
 
     suppressWarnings(dir.create("/tmp/counties"))
-    utils::unzip(zipfile=x, exdir=paste("/tmp/counties/",o,sep=""),overwrite=F)
+    suppressWarnings(utils::unzip(zipfile=x, exdir=paste("/tmp/counties/",o,sep=""),overwrite=F))
   }
   # by default, return as a layer to the user
   return(readOGR(paste("/tmp/counties/",o,sep=""),o,verbose=F))
 }
 
-processFocalCounty <- function(x){
-  b <- unpackCountiesZipfile(x)
+processFocalCounty <- function(zip=NULL,UID=NULL,buffer=0,write=F){
+  b <- unpackCountiesZipfile(zip)
   # build a unique identifier field from a composite of STATE and COUNTY FPs.
   b$UID <- paste(sprintf("%02d",as.numeric(b$STATEFP)),sprintf("%03d",as.numeric(b$COUNTYFP)),sep="")
   # parse our shapefile by the UID passed by our user
-  focal <- b[b$UID == argv[2],]
+  focal <- b[b$UID == UID,]
   if(nrow(focal)>1){
     warning("more than one county matched the UID specified at runtime -- this shouldn't happen.  Just using the first occurrence as our focal county")
     b <- b[1,]
   }
-  return(b)
+
+  if(write){
+    writeOGR(focal,".",paste("focal_county_",focal$UID,sep=""),driver="ESRI Shapefile",verbose=F,overwrite=T)
+  } else {
+    return(b)
+  }
 }
 
-b <- processFocalCounty(argv[1])
+b <- processFocalCounty(argv[1],argv[2],write=T)
