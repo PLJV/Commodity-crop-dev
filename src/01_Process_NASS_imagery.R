@@ -10,11 +10,16 @@ require(landscapeAnalysis)
 
 argv <- commandArgs(trailingOnly=T)
 
+#
+# getNASSValuesByCropName()
+#
 getNASSValuesByCropName(y=NULL,t=NULL){
   if(is.null(t)) t <- read.csv(list.files(pattern="csv$")[1])
     return(as.numeric(t[,1][grepl(tolower(t[,2]),pattern=tolower(y))]))
 }
-
+#
+# downsamplePtsToMinimum()
+#
 downsamplePtsToMinimum <- function(x,y){
   if(nrow(x@coords) > nrow(y@coords)){
     x<-x[sample(1:nrow(x@coords),size=nrow(y@coords)),]
@@ -23,7 +28,7 @@ downsamplePtsToMinimum <- function(x,y){
   }
   names(x) <- "response"
   names(y) <- "response"
-  rbind(x,y)
+  return(rbind(x,y))
 }
 
 #
