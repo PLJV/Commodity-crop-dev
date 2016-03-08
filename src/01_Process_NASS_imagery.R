@@ -13,7 +13,7 @@ argv <- commandArgs(trailingOnly=T)
 #
 # getNASSValuesByCropName()
 #
-getNASSValuesByCropName(y=NULL,t=NULL){
+getNASSValuesByCropName <- function(y=NULL,t=NULL){
   if(is.null(t)) t <- read.csv(list.files(pattern="csv$")[1])
     return(as.numeric(t[,1][grepl(tolower(t[,2]),pattern=tolower(y))]))
 }
@@ -35,7 +35,7 @@ downsamplePtsToMinimum <- function(x,y){
 # MAIN
 #
 
-nassImagery <- lapply(list.files(argv[1],pattern="tif$"),FUN=raster)
+nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$"),FUN=raster)
           b <- spTransform(readOGR(".",argv[2],verbose=F),CRS(projection(nassImagery[[1]])))
 
 nassImagery <- lapply(nassImagery,FUN=raster::crop,b)
