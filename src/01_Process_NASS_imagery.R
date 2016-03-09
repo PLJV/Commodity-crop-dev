@@ -3,8 +3,8 @@
 # and (2) is a focal_county_NNNNN shapefile layer in the CWD.  This script is designed to be called from 00_
 #
 
-require(rgdal)
-require(raster)
+require(rgdal,quietly=T)
+require(raster,quietly=T)
 require(utils)
 require(landscapeAnalysis)
 
@@ -35,7 +35,7 @@ downsamplePtsToMinimum <- function(x,y){
 # MAIN
 #
 
-nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$"),FUN=raster)
+nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$",full.names=T),FUN=raster)
           b <- spTransform(readOGR(".",argv[2],verbose=F),CRS(projection(nassImagery[[1]])))
 
 nassImagery <- lapply(nassImagery,FUN=raster::crop,b)
