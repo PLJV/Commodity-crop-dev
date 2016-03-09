@@ -97,12 +97,13 @@ extentToSoilDBCoords <- function(e) round(as.vector(e)[c(1,3,2,4)],2) # NRCS gat
 # extentToSsurgoSpatialPolygons()
 #
 extentToSsurgoSpatialPolygons <- function(x){
-  e <- extentToSoilDBCoords(extent(spTransform(x,CRS(projection("+init=epsg:4269"))))) # NRCS gateway sees input in NAD83 by default
+  toExtentCoords <- function(x){ extentToSoilDBCoords(extent(spTransform(x,CRS(projection("+init=epsg:4269"))))) } # NRCS gateway sees input in NAD83 by default
+  e <- toExtentCoords(x) # NRCS gateway sees input in NAD83 by default
    e <- try(mapunit_geom_by_ll_bbox(e))
   errorCount <- 0;
   while(class(e) == "try-error" && errorCount<3){
     Sys.sleep(2); # hobble our request for the sake of the NRCS gateway
-    e <- try(mapunit_geom_by_ll_bbox(extentToSoilDBCoords(extent(spTransform(x,CRS(projection("+init=epsg:4269")))))));
+    e <- try(mapunit_geom_by_ll_bbox(toExtentCoords(x)));
     errorCount<-errorCount+1;
   }
   if(class(e) == "try-error") quit("repeated failure trying to download units in BBOX for county")
