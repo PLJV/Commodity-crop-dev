@@ -45,57 +45,48 @@ muaggatt_variables <-
 # For floodfreqmax, floodfreqdcd
 #
 floodFrequencyToOrdinal <- function(x){
-  if (x == "None"){ x <- 1
-  } else if(x == 'Very rare'){ x <- 2
-  } else if(x == 'Rare'){ x <- 3
-  } else if(x == 'Occasional'){ x <- 4
-  } else if(x == 'Common'){ x <- 5
-  } else if(x == 'Frequent'){ x <- 6
-  } else if(x == 'Very frequent'){ x <- 7
-  } else if(x == 'Not rated'){ x <- NA
-  } else{ x <- NA;
-        cat(" -- encountered an unknown flood frequency class parsing muaggatt table.\n");
-  }
+  x[grepl(x,pattern="None")] <- 1
+  x[grepl(x,pattern="Very rare")] <- 2
+  x[grepl(x,pattern="Rare")] <- 3
+  x[grepl(x,pattern="Occasional")] <- 4
+  x[grepl(x,pattern="Common")] <- 5
+  x[grepl(x,pattern="Frequent")] <- 6
+  x[grepl(x,pattern="Very frequent")] <- 7
+  x[grepl(x,pattern="Not rated")] <- 2
+  return(as.numeric(x)) # Anything looming here that isn't numeric will return NA
 }
 # For drclassdcd,drclasswettest
-floodFrequencyToOrdinal <- function(x){
-  if(x == "Excessively drained"){ drclassdcd <- 1
-  } else if(x == "Somewhat excessively drained"){ x <- 2
-  } else if(x == "Well drained"){ x <- 3
-  } else if(x == "Moderately well drained"){ x <- 4
-  } else if(x == "Somewhat poorly drained"){ x <- 5
-  } else if(x == "Poorly drained"){ x <- 6
-  } else if(x == "Very poorly drained"){ x <- 7
-  } else if(x == "Not rated"){ x <- NA
-  } else { x <- NA;
-         cat(" -- encountered an unknown drainage class parsing muaggatt table.\n"); }
+drainageToOrdinal <- function(x){
+  x[grepl(x,pattern="Excessively drained")] <- 1
+  x[grepl(x,pattern="Somewhat excessively drained")] <- 2
+  x[grepl(x,pattern="Well drained")] <- 3
+  x[grepl(x,pattern="Moderately well drained")] <- 4
+  x[grepl(x,pattern="Somewhat poorly drained")] <- 5
+  x[grepl(x,pattern="Poorly drained")] <- 6
+  x[grepl(x,pattern="Very poorly drained")] <- 7
+  x[grepl(x,pattern="Not rated")] <- NA
+  return(as.numeric(x))
 }
 # For hydgrpdcd
 hydgrpToOrdinal <- function(x){
-  if(x == "A" ){ x <- 1
-  } else if(x == "B"){ x <- 2
-  } else if(x == "C"){ x <- 3
-  } else if(x == "D"){ x <- 4
-  } else if(x == "AD"){ x <- 5
-  } else if(x == "BD"){ x <- 6
-  } else if(x == "CD"){ x <- 7
-  } else if(x == "Not rated"){ x <- 7
-  } else if(suppressWarnings(!is.na(as.numeric(x)))){ x <- x
-  } else { cat(" -- encountered an unknown hydrologic group (",x,") parsing muaggatt table.\n",sep="");
-           hydgrpdcd <- NA;
-  }
+  x[grepl(x,pattern="A")] <- 1
+  x[grepl(x,pattern="B")] <- 2
+  x[grepl(x,pattern="C")] <- 3
+  x[grepl(x,pattern="D")] <- 4
+  x[grepl(x,pattern="AD")] <- 5
+  x[grepl(x,pattern="BD")] <- 6
+  x[grepl(x,pattern="CD")] <- 7
+  x[grepl(x,pattern="Not rated")] <- NA
+  return(as.numeric(x))
 }
 # For hydclprs
 hydclprsToOrdinal <- function(x){
   # note: these are now numeric 0-10, as of SSURGO v9
-  if(x == "All hydric"){ x <- 1
-  } else if(x == "Not hydric"){ x <- 2
-  } else if(x == "Partially hydric"){ x <- 3
-  } else if(x == "Unknown"){ x <- 4
-  } else if(suppressWarnings(!is.na(as.numeric(x)))) { x <- x
-  } else {
-    cat(" -- encountered an unknown hydrologic category (",x,") parsing muaggatt table.\n",sep="");
-  }
+  x[grepl(x,pattern="All hydric")] <- 1
+  x[grepl(x,pattern="Not hydric")] <- 2
+  x[grepl(x,pattern="Partially hydric")] <- 3
+  x[grepl(x,pattern="Unknown")] <- NA
+  return(as.numeric(x))
 }
 #
 # extentToSoilDBCoords()
@@ -109,7 +100,7 @@ extentToSoilDBCoords <- function(e,useFloorCeiling=F) {
   return(e)
 }
 #
-#
+# get_mapunitGeomFile()
 #
 get_mapunitGeomFile <- function(){
   f <- list.files(path="/tmp",full.names=T,recursive=T,pattern="gml$")
@@ -120,7 +111,7 @@ get_mapunitGeomFile <- function(){
   return(f[which(fTime == max(fTime))])
 }
 #
-#
+# calcMultiplier_mapunitGeomFile()
 #
 calcMultiplier_mapunitGeomFile <- function(x){
   o<-readLines(x)
@@ -158,9 +149,9 @@ extentToSsurgoSpatialPolygons <- function(x){
     }
   }
   if(class(e) == "try-error") stop("repeated failure trying to download units in BBOX for focal area")
-    projection(e) <- CRS(projection("+init=epsg:4269"))
-    
-  return(e)
+
+  projection(e) <- CRS(projection("+init=epsg:4269"))
+    return(e)
 }
 #
 # parseMuaggattTable()
@@ -188,11 +179,19 @@ res <- unique(SDA_query(parseMuaggattTable(e,muaggatt.vars=muaggatt_variables)))
 
 # merge to our shapefile
 e@data <- merge(e@data,res,by="mukey")
+
+# convert our categorical variables to ordinal variables that are tractable for RandomForests
+e$flodfreqmax <- floodFrequencyToOrdinal(e$flodfreqmax)
+e$drclassdcd  <- drainageToOrdinal(e$drclassdcd)
+e$flodfreqdcd <- floodFrequencyToOrdinal(e$flodfreqdcd)
+e$hydgrpdcd   <- hydgrpToOrdinal(e$hydgrpdcd)
+
+
 # convert to a raster
 cat(" -- generating gridded raster surfaces from SSURGO polygons")
-projection(e) <- projection("+init=epsg:4269")
-  e <- spTransform(e,CRS(projection(pts)))
-    e <- rasterize(e,raster(e,res=30),field=names(e)[!grepl(names(e),pattern="mu|vers|area")],progress='text')
+e <- spTransform(e,CRS(projection(s)))
+  e <- rasterize(e,raster(e,res=30),field=names(e)[!grepl(names(e),pattern="mu|vers|area")],progress='text')
+  
 muaggatt_variables <- e; rm(e)
 
 # prepare our aquifer data
