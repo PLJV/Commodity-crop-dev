@@ -1,3 +1,11 @@
+#
+#
+# Author: Kyle Taylor (kyle.taylor@pljv.org) [2016]
+#
+# Cleaning-up and re-tooling previous implementation so that it is pure 'R' and more closely follows functional
+# design principles for v.2.0.
+#
+
 require(rgdal)
 require(raster)
 require(utils)
@@ -92,22 +100,67 @@ hydclprsToOrdinal <- function(x){
 #
 # extentToSoilDBCoords()
 #
-extentToSoilDBCoords <- function(e) round(as.vector(e)[c(1,3,2,4)],2) # NRCS gateway uses USGS web notation for its bounding box coords, accurate to 2 decimal places
+extentToSoilDBCoords <- function(e,useFloorCeiling=F) {
+  e<-as.vector(e)[c(1,3,2,4)]
+  # NRCS gateway uses USGS web notation for its bounding box coords -- extend coverage to the
+  # nearest degree to make sure we capture the full extent of polygons.  Can crop it down later, if needed.
+  if(useFloorCeiling) e <- c(floor(e[1]),floor(e[2]),ceiling(e[3]),ceiling(e[4]))
+
+  return(e)
+}
+#
+#
+#
+get_mapunitGeomFile <- function(){
+  f <- list.files(path="/tmp",full.names=T,recursive=T,pattern="gml$")
+
+  fTime <- unlist(strsplit(as.character(file.info(f)$mtime),split=' '))
+    fTime <- fTime[grepl(fTime,pattern=':')]
+
+  return(f[which(fTime == max(fTime))])
+}
+#
+#
+#
+calcMultiplier_mapunitGeomFile <- function(x){
+  o<-readLines(x)
+  # if the thread was aborted, assume that it was because our BBOX was too large and we should step down
+  if(grepl(tolower(o[length(o)-1]),pattern="thread was being aborted")){
+    return(-0.005) # if we simply experienced an abort, assume that we are running on the heavy side, but not so heavy that it's outrageous.
+  } else if(grepl(tolower(o[length(o)-1]),pattern="exceeds the limit of")){
+    return(-0.005)
+  } else if(grepl(tolower(o[length(o)-3]),pattern="null>missing<")){
+    return(+0.005)
+  } else {
+    stop("unhandled error from mapunit_geom_by_ll_bbox; see:",x)
+  }
+}
 #
 # extentToSsurgoSpatialPolygons()
 #
 extentToSsurgoSpatialPolygons <- function(x){
-  toExtentCoords <- function(x){ extentToSoilDBCoords(extent(spTransform(x,CRS(projection("+init=epsg:4269"))))) } # NRCS gateway sees input in NAD83 by default
-  e <- toExtentCoords(x) # NRCS gateway sees input in NAD83 by default
-   e <- try(mapunit_geom_by_ll_bbox(e))
-  errorCount <- 0;
-  while(class(e) == "try-error" && errorCount<3){
-    Sys.sleep(2); # hobble our request for the sake of the NRCS gateway
-    e <- try(mapunit_geom_by_ll_bbox(toExtentCoords(x)));
-    errorCount<-errorCount+1;
+  sizeHeurstics = data.frame(area=NA,multiplier=NA)
+     multiplier = 1.015
+  # NRCS gateway sees input in NAD83 by default -- also, it will not return an intersect.  Rather, it takes all intersecting features completely within a bounding box.
+  # Buffer the current extent to allow for some wiggle-room.  We will walk down our extent as needed, through heuristic optimization.
+  e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier)) # NRCS gateway sees input in NAD83 by default
+    sizeHeurstics[1,1] <- diff(c(e[1],e[3]))*diff(c(e[2],e[4]))
+    sizeHeurstics[1,2] <- multiplier
+  e <- try(mapunit_geom_by_ll_bbox(e))
+  if(class(e) == "try-error"){
+    while(class(e) == "try-error" && nrow(sizeHeurstics)<100){
+      Sys.sleep(1) # hobble by 1 second to prevent race-condition in file I/O
+      cat(" -- heuristics step:",nrow(sizeHeurstics),"\n")
+      multiplier <- multiplier + calcMultiplier_mapunitGeomFile(get_mapunitGeomFile())
+      e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier))
+        sizeHeurstics <- rbind(sizeHeurstics,data.frame(area=diff(c(e[1],e[3]))*diff(c(e[2],e[4])),multiplier=multiplier))
+      e <- try(mapunit_geom_by_ll_bbox(e));
+    }
   }
-  if(class(e) == "try-error") stop("repeated failure trying to download units in BBOX for county")
-    return(e)
+  if(class(e) == "try-error") stop("repeated failure trying to download units in BBOX for focal area")
+    projection(e) <- CRS(projection("+init=epsg:4269"))
+    
+  return(e)
 }
 #
 # parseMuaggattTable()
@@ -126,9 +179,9 @@ parseMuaggattTable <- function(x,muaggatt.vars=NULL){
 #
 
 # accept input data from the user demonstrating the extent of our study area
-pts <- readOGR(".",argv[1],verbose=F)
+s <- readOGR(".",argv[1],verbose=F)
 # fetch and rasterize some SSURGO data
-e <- extentToSsurgoSpatialPolygons(pts)
+e <- extentToSsurgoSpatialPolygons(s)
 # now get component and horizon-level data for these map unit keys
 res <- unique(SDA_query(parseMuaggattTable(e,muaggatt.vars=muaggatt_variables)))
 # reclassify some of our categorical information into ordinal classes
