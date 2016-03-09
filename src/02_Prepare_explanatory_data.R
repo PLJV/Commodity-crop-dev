@@ -106,7 +106,7 @@ extentToSsurgoSpatialPolygons <- function(x){
     e <- try(mapunit_geom_by_ll_bbox(toExtentCoords(x)));
     errorCount<-errorCount+1;
   }
-  if(class(e) == "try-error") quit("repeated failure trying to download units in BBOX for county")
+  if(class(e) == "try-error") stop("repeated failure trying to download units in BBOX for county")
     return(e)
 }
 #
