@@ -135,13 +135,13 @@ extentToSsurgoSpatialPolygons <- function(x){
   # NRCS gateway sees input in NAD83 by default -- also, it will not return an intersect.  Rather, it takes all intersecting features completely within a bounding box.
   # Buffer the current extent to allow for some wiggle-room.  We will walk down our extent as needed, through heuristic optimization.
   e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier)) # NRCS gateway sees input in NAD83 by default
-    sizeHeurstics[1,1] <- diff(c(e[1],e[3]))*diff(c(e[2],e[4]))
-    sizeHeurstics[1,2] <- multiplier
+    sizeHeurstics[1,1] <- diff(c(e[1],e[3]))*diff(c(e[2],e[4])) # area of our bounding box in degrees^2
+    sizeHeurstics[1,2] <- multiplier                            # multiplier constant applied for our initial step
   e <- try(mapunit_geom_by_ll_bbox(e))
   if(class(e) == "try-error"){
     while(class(e) == "try-error" && nrow(sizeHeurstics)<100){
-      Sys.sleep(1) # hobble by 1 second to prevent race-condition in file I/O
-      cat(" -- heuristics step:",nrow(sizeHeurstics),"\n")
+      Sys.sleep(1) # hobble by 1 second to limit likelihood of race-conditions in file I/O
+      cat("\n -- heuristics step:",nrow(sizeHeurstics),"\n")
       multiplier <- multiplier + calcMultiplier_mapunitGeomFile(get_mapunitGeomFile())
       e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier))
         sizeHeurstics <- rbind(sizeHeurstics,data.frame(area=diff(c(e[1],e[3]))*diff(c(e[2],e[4])),multiplier=multiplier))
@@ -186,12 +186,11 @@ e$drclassdcd  <- drainageToOrdinal(e$drclassdcd)
 e$flodfreqdcd <- floodFrequencyToOrdinal(e$flodfreqdcd)
 e$hydgrpdcd   <- hydgrpToOrdinal(e$hydgrpdcd)
 
-
 # convert to a raster
-cat(" -- generating gridded raster surfaces from SSURGO polygons")
+cat(" -- generating gridded raster surfaces from SSURGO polygons:")
 e <- spTransform(e,CRS(projection(s)))
   e <- rasterize(e,raster(e,res=30),field=names(e)[!grepl(names(e),pattern="mu|vers|area")],progress='text')
-  
+
 muaggatt_variables <- e; rm(e)
 
 # prepare our aquifer data
