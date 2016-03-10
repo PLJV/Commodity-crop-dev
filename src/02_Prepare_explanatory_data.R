@@ -2,14 +2,15 @@
 #
 # Author: Kyle Taylor (kyle.taylor@pljv.org) [2016]
 #
-# Cleaning-up and re-tooling previous implementation so that it is pure 'R' and more closely follows functional
-# design principles for v.2.0.
-#
+# Cleaning-up and refactoring previous implementation so that it is pure 'R' and more closely follows functional
+# design principles for v.2.0.  Adding the ability to generate training data across broader geographic extents than
+# a single county, per v.1.0.
 
 require(rgdal)
 require(raster)
 require(utils)
 require(soilDB)
+require(parallel)
 require(landscapeAnalysis)
 
 argv <- commandArgs(trailingOnly=T)
@@ -102,21 +103,28 @@ extentToSoilDBCoords <- function(e,useFloorCeiling=F) {
 #
 # get_mapunitGeomFile()
 #
+# Recursively dig through temp file space looking for a GML fetched by soilDB.  Check the
+# file time stamp associated with all GML files and return the full path of the most recent
+# file to the user.
+#
 get_mapunitGeomFile <- function(){
   f <- list.files(path="/tmp",full.names=T,recursive=T,pattern="gml$")
-
   fTime <- unlist(strsplit(as.character(file.info(f)$mtime),split=' '))
     fTime <- fTime[grepl(fTime,pattern=':')]
-
   return(f[which(fTime == max(fTime))])
 }
 #
 # calcMultiplier_mapunitGeomFile()
 #
+# Accepts a file path to GML markup and parses the file for keywords consistent with errors
+# that we can use to optimize heuristics for further download attempts to find a good fit for the BBOX
+# parameter for the soils gateway.
+#
 calcMultiplier_mapunitGeomFile <- function(x){
   o<-readLines(x)
   # if the thread was aborted, assume that it was because our BBOX was too large and we should step down
   if(grepl(tolower(o[length(o)-1]),pattern="thread was being aborted")){
+    cat(" -- download aborted by gateway. check your bandwidth (are you downloading something else in the background?)\n")
     return(-0.005) # if we simply experienced an abort, assume that we are running on the heavy side, but not so heavy that it's outrageous.
   } else if(grepl(tolower(o[length(o)-1]),pattern="exceeds the limit of")){
     return(-0.005)
@@ -169,29 +177,37 @@ parseMuaggattTable <- function(x,muaggatt.vars=NULL){
 # MAIN
 #
 
+cl <- makeCluster(parallel::detectCores()-1)
+
 # accept input data from the user demonstrating the extent of our study area
 s <- readOGR(".",argv[1],verbose=F)
 # fetch and rasterize some SSURGO data
-e <- extentToSsurgoSpatialPolygons(s)
+o <- extentToSsurgoSpatialPolygons(s)
 # now get component and horizon-level data for these map unit keys
-res <- unique(SDA_query(parseMuaggattTable(e,muaggatt.vars=muaggatt_variables)))
+res <- unique(SDA_query(parseMuaggattTable(o,muaggatt.vars=muaggatt_variables)))
 # reclassify some of our categorical information into ordinal classes
 
 # merge to our shapefile
-e@data <- merge(e@data,res,by="mukey")
+o@data <- merge(o@data,res,by="mukey")
 
 # convert our categorical variables to ordinal variables that are tractable for RandomForests
-e$flodfreqmax <- floodFrequencyToOrdinal(e$flodfreqmax)
-e$drclassdcd  <- drainageToOrdinal(e$drclassdcd)
-e$flodfreqdcd <- floodFrequencyToOrdinal(e$flodfreqdcd)
-e$hydgrpdcd   <- hydgrpToOrdinal(e$hydgrpdcd)
+o$flodfreqmax <- floodFrequencyToOrdinal(o$flodfreqmax)
+o$drclassdcd  <- drainageToOrdinal(o$drclassdcd)
+o$flodfreqdcd <- floodFrequencyToOrdinal(o$flodfreqdcd)
+o$hydgrpdcd   <- hydgrpToOrdinal(o$hydgrpdcd)
 
-# convert to a raster
+# convert to rasters
 cat(" -- generating gridded raster surfaces from SSURGO polygons:")
-e <- spTransform(e,CRS(projection(s)))
-  e <- rasterize(e,raster(e,res=30),field=names(e)[!grepl(names(e),pattern="mu|vers|area")],progress='text')
+f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
+o <- spTransform(o,CRS(projection(s)))
+  o <- o[names(o)[!grepl(names(o),pattern="mu|vers|area")]] # drop unnecessary variables
 
-muaggatt_variables <- e; rm(e)
+out <- list(); # today, my brain can't make splitting a SpatialPolygons file by field into a list happen for some reason
+  for(i in 1:length(names(o))){ out[[length(out)+1]] <- o[,names(o)[i]] }
+    o <- parLapply(cl,o,fun=raster::crop,extent(s))
+      out <- parLapply(cl,out,fun=f,progress=NULL)
+        lapply(out,FUN=writeRaster,as.list(paste(argv[1],"_",names(o),".tif",sep=""))
+          rm(o);
 
 # prepare our aquifer data
 # prepare our climate data
