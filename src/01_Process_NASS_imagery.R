@@ -1,5 +1,5 @@
 #
-# Accepts two arguments: (1) is a directory path containing raster explanatory variables
+# Accepts two arguments: (1) is a directory path containing processed (GeoTIFF) NASS rasters
 # and (2) is a focal_county_NNNNN shapefile layer in the CWD.  This script is designed to be called from 00_
 #
 

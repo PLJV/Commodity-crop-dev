@@ -21,26 +21,24 @@ argv <- commandArgs(trailingOnly=T)
 
 muaggatt_variables <-
  c(
- "aws025wta",       # Available Water Storage 0-25 cm
- "aws050wta",       # Available Water Storage 0-50 cm
- "aws0150wta",      # Available Water Storage 0-150 cm
- "brockdepmin",     # Bedrock Depth - Minimum
- "aws0100wta",      # Available Water Storage 0-100 cm
- "drclassdcd",      # Drainage Class - Dominant Condition
- "slopegraddcp",    # Slope Gradient - Dominant Component
- "slopegradwta",    # Slope Gradient - Weighted Average
- "wtdepannmin",     # Water Table Depth - Annual - Minimum
- "wtdepaprjunmin",  # Water Table Depth - April - June - Minimum
- "flodfreqdcd",     # Flooding Frequency - Dominant Condition
- "flodfreqmax",     # Flooding Frequency - Maximum
- "pondfreqprs",     # Ponding Frequency - Presence
- "hydgrpdcd",       # Hydrologic Group - Dominant Conditionsp
- "iccdcd",          # Irrigated Capability Class - Dominant Condition
- "iccdcdpct",       # Irrigated Capability Class  - Dominant Condition Aggregate Percent
- "hydclprs",        # Hydric Classification - Presence
- "niccdcd")         # Non-Irrigated Capability Class - Dominant Condition
-
-
+   "aws025wta",       # Available Water Storage 0-25 cm
+   "aws050wta",       # Available Water Storage 0-50 cm
+   "aws0150wta",      # Available Water Storage 0-150 cm
+   "brockdepmin",     # Bedrock Depth - Minimum
+   "aws0100wta",      # Available Water Storage 0-100 cm
+   "drclassdcd",      # Drainage Class - Dominant Condition
+   "slopegraddcp",    # Slope Gradient - Dominant Component
+   "slopegradwta",    # Slope Gradient - Weighted Average
+   "wtdepannmin",     # Water Table Depth - Annual - Minimum
+   "wtdepaprjunmin",  # Water Table Depth - April - June - Minimum
+   "flodfreqdcd",     # Flooding Frequency - Dominant Condition
+   "flodfreqmax",     # Flooding Frequency - Maximum
+   "pondfreqprs",     # Ponding Frequency - Presence
+   "hydgrpdcd",       # Hydrologic Group - Dominant Conditionsp
+   "iccdcd",          # Irrigated Capability Class - Dominant Condition
+   "iccdcdpct",       # Irrigated Capability Class  - Dominant Condition Aggregate Percent
+   "hydclprs",        # Hydric Classification - Presence
+   "niccdcd")         # Non-Irrigated Capability Class - Dominant Condition
 #
 # floodFrequencyToOrdinal()
 # For floodfreqmax, floodfreqdcd
@@ -181,33 +179,36 @@ cl <- makeCluster(parallel::detectCores()-1)
 
 # accept input data from the user demonstrating the extent of our study area
 s <- readOGR(".",argv[1],verbose=F)
-# fetch and rasterize some SSURGO data
-o <- extentToSsurgoSpatialPolygons(s)
-# now get component and horizon-level data for these map unit keys
-res <- unique(SDA_query(parseMuaggattTable(o,muaggatt.vars=muaggatt_variables)))
-# reclassify some of our categorical information into ordinal classes
+# calculate our SSURGO soil variables, if needed
+if(sum(grepl(list.files(pattern="tif$"),pattern=paste(muaggatt_variables,collapse='|'))) < length(muaggatt_variables)){
+  # fetch and rasterize some SSURGO data
+  o <- extentToSsurgoSpatialPolygons(s)
+  # now get component and horizon-level data for these map unit keys
+  res <- unique(SDA_query(parseMuaggattTable(o,muaggatt.vars=muaggatt_variables)))
+  # reclassify some of our categorical information into ordinal classes
 
-# merge to our shapefile
-o@data <- merge(o@data,res,by="mukey")
+  # merge to our shapefile
+  o@data <- merge(o@data,res,by="mukey")
 
-# convert our categorical variables to ordinal variables that are tractable for RandomForests
-o$flodfreqmax <- floodFrequencyToOrdinal(o$flodfreqmax)
-o$drclassdcd  <- drainageToOrdinal(o$drclassdcd)
-o$flodfreqdcd <- floodFrequencyToOrdinal(o$flodfreqdcd)
-o$hydgrpdcd   <- hydgrpToOrdinal(o$hydgrpdcd)
+  # convert our categorical variables to ordinal variables that are tractable for RandomForests
+  o$flodfreqmax <- floodFrequencyToOrdinal(o$flodfreqmax)
+  o$drclassdcd  <- drainageToOrdinal(o$drclassdcd)
+  o$flodfreqdcd <- floodFrequencyToOrdinal(o$flodfreqdcd)
+  o$hydgrpdcd   <- hydgrpToOrdinal(o$hydgrpdcd)
 
-# convert to rasters
-cat(" -- generating gridded raster surfaces from SSURGO polygons:")
-f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
-o <- spTransform(o,CRS(projection(s)))
-  o <- o[names(o)[!grepl(names(o),pattern="mu|vers|area")]] # drop unnecessary variables
+  # convert to rasters
+  cat(" -- generating gridded raster surfaces from SSURGO polygons:")
+  f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
+  o <- spTransform(o,CRS(projection(s)))
+    o <- o[names(o)[!grepl(names(o),pattern="mu|vers|area")]] # drop unnecessary variables
 
-out <- list(); # today, my brain can't make splitting a SpatialPolygons file by field into a list happen for some reason
-  for(i in 1:length(names(o))){ out[[length(out)+1]] <- o[,names(o)[i]] }
-    o <- parLapply(cl,o,fun=raster::crop,extent(s))
-      out <- parLapply(cl,out,fun=f,progress=NULL)
-        lapply(out,FUN=writeRaster,as.list(paste(argv[1],"_",names(o),".tif",sep=""))
-          rm(o);
+  out <- list(); # today, my brain can't make splitting a SpatialPolygons file by field into a list happen for some reason
+    for(i in 1:length(names(o))){ out[[length(out)+1]] <- o[,names(o)[i]] }
+      o <- parLapply(cl,o,fun=raster::crop,extent(s))
+        out <- parLapply(cl,out,fun=f,progress=NULL)
+          lapply(out,FUN=writeRaster,as.list(paste(argv[1],"_",names(o),".tif",sep=""))
+            rm(o);
+}
 
 # prepare our aquifer data
 # prepare our climate data
