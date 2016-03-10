@@ -180,7 +180,7 @@ cl <- makeCluster(parallel::detectCores()-1)
 # accept input data from the user demonstrating the extent of our study area
 s <- readOGR(".",argv[1],verbose=F)
 # calculate our SSURGO soil variables, if needed
-if(sum(grepl(list.files(pattern="tif$"),pattern=paste(muaggatt_variables,collapse='|'))) < length(muaggatt_variables)){
+if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(muaggatt_variables,collapse='|'))) < length(muaggatt_variables)){
   # fetch and rasterize some SSURGO data
   o <- extentToSsurgoSpatialPolygons(s)
   # now get component and horizon-level data for these map unit keys
@@ -197,18 +197,21 @@ if(sum(grepl(list.files(pattern="tif$"),pattern=paste(muaggatt_variables,collaps
   o$hydgrpdcd   <- hydgrpToOrdinal(o$hydgrpdcd)
 
   # convert to rasters
-  cat(" -- generating gridded raster surfaces from SSURGO polygons:")
-  f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
+  cat(" -- cropping SSURGO vectors to the extent of the focal county\n")
   o <- spTransform(o,CRS(projection(s)))
     o <- o[names(o)[!grepl(names(o),pattern="mu|vers|area")]] # drop unnecessary variables
-
+        o <- raster::crop(o,s)
+  cat(" -- generating gridded raster surfaces from SSURGO polygons\n")
   out <- list(); # today, my brain can't make splitting a SpatialPolygons file by field into a list happen for some reason
     for(i in 1:length(names(o))){ out[[length(out)+1]] <- o[,names(o)[i]] }
-      o <- parLapply(cl,o,fun=raster::crop,extent(s))
+      f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
         out <- parLapply(cl,out,fun=f,progress=NULL)
-          lapply(out,FUN=writeRaster,as.list(paste(argv[1],"_",names(o),".tif",sep=""))
-            rm(o);
-}
+          f <- function(x,y,cName=NULL){ require(raster); writeRaster(x,filename=paste(cName,"_",y,".tif",sep="",overwrite=T),format="GTiff") }
+            for(i in 1:length(out)){ f(out[[i]],y=names(o)[i],cName=argv[1]) }  
+  # clean-up
+  endCluster();
+  rm(o,f,cl);
+} else { cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping...\n",sep="")) }
 
 # prepare our aquifer data
 # prepare our climate data
