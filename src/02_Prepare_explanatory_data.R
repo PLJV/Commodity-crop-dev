@@ -19,10 +19,25 @@ argv <- commandArgs(trailingOnly=T)
 # Local functions
 #
 
-climate_variables <- c("dd5.tif","ffp.tif","map.tif","mat_tenths.tif") # climate variables from Reihfeldt
+# climate variables to be calculated from Reihfeldt
+climate_variables <- c(
+                        "dd5.tif",
+                        "ffp.tif",
+                        "map.tif",
+                        "mat_tenths.tif"
+                      )
 
-topographic_variables <- c("elevationBcr1819.tif","elevationStdDev3.tif","aspectBcr1819.tif","rough27.tif","rough3.tif","slopeBcr1819.tif")
+# topographic variables precalculated from DEM
+topographic_variables <- c(
+                            "elevation.tif",
+                            "elevationStdDev3.tif",
+                            "aspect.tif",
+                            "rough27.tif",
+                            "rough3.tif",
+                            "slope.tif"
+                          )
 
+# SSURGO variables calculated from muaggatt tables
 muaggatt_variables <-
  c(
    "aws025wta",       # Available Water Storage 0-25 cm
@@ -48,7 +63,7 @@ muaggatt_variables <-
 #
 lWriteRaster <- function(x,y,cName=NULL){
   require(raster);
-  raster::writeRaster(x,filename=paste(cName,"_",y,".tif",sep="",overwrite=T),format="GTiff")
+  raster::writeRaster(x,filename=paste(cName,"_",y,".tif",sep=""),overwrite=T,format="GTiff")
 }
 #
 # floodFrequencyToOrdinal()
@@ -158,7 +173,7 @@ extentToSsurgoSpatialPolygons <- function(x){
   if(class(e) == "try-error"){
     while(class(e) == "try-error" && nrow(sizeHeurstics)<100){
       Sys.sleep(1) # hobble by 1 second to limit likelihood of race-conditions in file I/O
-      cat("\n -- heuristics step:",nrow(sizeHeurstics),"\n")
+      cat("\n -- bounding-box heuristics optimizer, step:",nrow(sizeHeurstics),"\n\n")
       multiplier <- multiplier + calcMultiplier_mapunitGeomFile(getMapunitGeomFile())
       e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier))
         sizeHeurstics <- rbind(sizeHeurstics,data.frame(area=diff(c(e[1],e[3]))*diff(c(e[2],e[4])),multiplier=multiplier))
@@ -208,17 +223,12 @@ fetchClimateVariables <- function(){
   v <- c("dd5.zip","ffp.zip","map.zip","mat_tenths.zip")
   return(lapply(v,unpackClimateVars))
 }
-#
-# fetchTopographicVariables()
-#
-fetchTopographicVariables <- function(){
 
-}
 #
 # MAIN
 #
 
-system("clear"); cat("## Commodity Crop Production Suitability Model (v.2.0)\n")
+system("clear"); cat("## Commodity Crop Production Suitability Model (v.2.0) ##\n\n")
 
 # accept input data from the user demonstrating the extent of our study area
 s <- readOGR(".",argv[1],verbose=F)
@@ -236,14 +246,14 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(m
   county_polygons@data <- merge(county_polygons@data,res,by="mukey")
 
   # convert our categorical variables to ordinal variables that are tractable for RandomForests
-  county_polygons$flodfreqmax <- floodFrequencyToOrdinal(o$flodfreqmax)
-  county_polygons$drclassdcd  <- drainageToOrdinal(o$drclassdcd)
-  county_polygons$flodfreqdcd <- floodFrequencyToOrdinal(o$flodfreqdcd)
-  county_polygons$hydgrpdcd   <- hydgrpToOrdinal(o$hydgrpdcd)
+  county_polygons$flodfreqmax <- floodFrequencyToOrdinal(county_polygons$flodfreqmax)
+  county_polygons$drclassdcd  <- drainageToOrdinal(county_polygons$drclassdcd)
+  county_polygons$flodfreqdcd <- floodFrequencyToOrdinal(county_polygons$flodfreqdcd)
+  county_polygons$hydgrpdcd   <- hydgrpToOrdinal(county_polygons$hydgrpdcd)
 
   # convert to rasters
   cat(" -- cropping SSURGO vectors to the extent of the focal county\n")
-  county_polygons <- spTransform(o,CRS(projection(s)))
+  county_polygons <- spTransform(county_polygons,CRS(projection(s)))
     county_polygons <- county_polygons[names(county_polygons)[!grepl(names(county_polygons),pattern="mu|vers|area")]] # drop unnecessary variables
         county_polygons <- raster::crop(county_polygons,s)
   cat(" -- generating gridded raster surfaces from SSURGO polygons\n")
@@ -269,7 +279,7 @@ if(!file.exists(paste(argv[1],"_satThick_10_14.tif",sep=""))){
   if(file.exists("satThick_10_14.tif")){
     aquiferSatThickness <- raster("satThick_10_14.tif")
       aquiferSatThickness <- projectRaster(aquiferSatThickness,crs=CRS(projection(s)))
-        aquiferSatThickness <- crop(aquiferSatThickness,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
+        aquiferSatThickness <- crop(aquiferSatThickness,extent(s))
           aquiferSatThickness <- resample(aquiferSatThickness,ssurgo_variables[[1]],method='bilinear')
     extent(aquiferSatThickness) <- alignExtent(aquiferSatThickness,out[[1]])
       writeRaster(aquiferSatThickness,paste(argv[1],"_satThick_10_14.tif",sep=""),overwrite=T)
@@ -285,14 +295,14 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(c
   # set-up a cluster for parallelization
   cl <- makeCluster((parallel::detectCores()-1))
   cat(" -- processing source climate data\n")
-  names <-   names <- substr(climate_variables,1,nchar(climate_variables)-4)
+  names <- substr(climate_variables,1,nchar(climate_variables)-4)
   climate_variables <- fetchClimateVariables()
     climate_variables <- parLapply(cl,climate_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
       extents <- lapply(climate_variables,alignExtent,ssurgo_variables[[1]])
         for(i in 1:length(climate_variables)){ extent(climate_variables[[i]]) <- extents[[i]] }
-    climate_variables <- parLapply(cl,climate_variables,fun=crop,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
-      climate_variables <- parLapply(cl,climate_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
-        for(i in 1:length(climate_variables)){ lWriteRaster(climate_variables[[i]],y=names[i],cName=argv[1]) }
+  climate_variables <- parLapply(cl,climate_variables,fun=crop,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
+    climate_variables <- parLapply(cl,climate_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
+      for(i in 1:length(climate_variables)){ lWriteRaster(climate_variables[[i]],y=names[i],cName=argv[1]) }
   endCluster()
 } else {
   cat(paste(" -- existing climate rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
@@ -303,6 +313,22 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(c
 
 # calculate our topographic landscape variables
 if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(topographic_variables,collapse='|'))) < length(topographic_variables)){
-topographic_variables
+  cat(" -- processing topographic data\n")
+  # set-up a cluster for parallelization
+  cl <- makeCluster((parallel::detectCores()-1))
 
+  names <- substr(topographic_variables,1,nchar(topographic_variables)-4)
+  topographic_variables <- lapply(topographic_variables,FUN=raster)
+    topographic_variables <- parLapply(cl,topographic_variables,fun=raster::crop,extent(spTransform(s,CRS(projection(topographic_variables[[1]]))))) # these are very large.  Going to crop to extent of study region first
+      topographic_variables <- parLapply(cl,topographic_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
+  extents <- lapply(topographic_variables,alignExtent,ssurgo_variables[[1]])
+    for(i in 1:length(topographic_variables)){ extent(topographic_variables[[i]]) <- extents[[i]] }
+  topographic_variables <- parLapply(cl,topographic_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
+  for(i in 1:length(topographic_variables)){ lWriteRaster(topographic_variables[[i]],y=names[i],cName=argv[1]) }
+  endCluster()
+} else {
+  cat(paste(" -- existing topographic rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
+  out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
+    topographic_variables <- out[grepl(out,pattern=paste(topographic_variables,collapse="|"))]
+      topographic_variables <- lapply(topographic_variables,FUN=raster)
 }
