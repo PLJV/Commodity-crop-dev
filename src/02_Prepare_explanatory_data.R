@@ -170,6 +170,18 @@ parseMuaggattTable <- function(x,muaggatt.vars=NULL){
              "ORDER BY muaggatt.mukey ASC", sep="")
   return(q)
 }
+#
+# fetchClimateVariables()
+#
+fetchClimateVariables <- function(){
+  v <- c("dd5.zip","ffp.zip","map.zip","mat_tenths.zip")
+  if(sum(grepl(list.files(pattern="zip$"),pattern=paste(v,collapse="|")))<length(v)){
+    toFetch <- v[!grepl(list.files(pattern="zip$"),pattern=paste(v,collapse="|"))]
+      toFetch <- paste("http://forest.moscowfsl.wsu.edu/climate/current/allNA/derivedGrids/",toFetch,sep="")
+    lapply(toFetch,FUN=utils::download.file)
+  }
+  
+}
 
 #
 # MAIN
@@ -207,12 +219,30 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(m
       f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
         out <- parLapply(cl,out,fun=f,progress=NULL)
           f <- function(x,y,cName=NULL){ require(raster); writeRaster(x,filename=paste(cName,"_",y,".tif",sep="",overwrite=T),format="GTiff") }
-            for(i in 1:length(out)){ f(out[[i]],y=names(o)[i],cName=argv[1]) }  
+            for(i in 1:length(out)){ f(out[[i]],y=names(o)[i],cName=argv[1]) }
   # clean-up
   endCluster();
   rm(o,f,cl);
-} else { cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping...\n",sep="")) }
-
+} else {
+  cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
+  out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
+    out <- out[grepl(out,pattern=paste(muaggatt_variables,collapse="|"))]
+      out <- lapply(out,FUN=raster)
+}
 # prepare our aquifer data
+if(!file.exists(paste(argv[1],"_satThick_10_14.tif",sep=""))){
+  cat(" -- cropping, resampling, and snapping aquifer saturated thickness so that it is consistent with our SSURGO variables\n")
+  if(file.exists("satThick_10_14.tif")){
+    aquiferSatThickness <- raster("satThick_10_14.tif")
+      aquiferSatThickness <- projectRaster(aquiferSatThickness,crs=CRS(projection(s)))
+        aquiferSatThickness <- crop(aquiferSatThickness,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
+          aquiferSatThickness <- resample(aquiferSatThickness,out[[1]],method='bilinear')
+    extent(aquiferSatThickness) <- alignExtent(aquiferSatThickness,out[[1]])
+      writeRaster(aquiferSatThickness,paste(argv[1],"_satThick_10_14.tif",sep=""),overwrite=T)
+  } else {
+    stop("couldn't find an appropriate saturated thickness raster in the CWD")
+  }
+}
 # prepare our climate data
+
 # calculate our topographic landscape variables
