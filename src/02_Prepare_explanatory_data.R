@@ -216,9 +216,13 @@ unpackClimateVars <- function(x){
 fetchClimateVariables <- function(){
   v <- c("dd5.zip","ffp.zip","map.zip","mat_tenths.zip")
   if(sum(grepl(list.files(pattern="zip$"),pattern=paste(v,collapse="|")))<length(v)){
-    toFetch <- v[!grepl(list.files(pattern="zip$"),pattern=paste(v,collapse="|"))]
-      toFetch <- paste("http://forest.moscowfsl.wsu.edu/climate/current/allNA/derivedGrids/",toFetch,sep="")
-    lapply(toFetch,FUN=utils::download.file)
+    if(length(list.files(pattern="zip$"))==0){
+      zips <- v
+    } else {
+      zips <- v[!grepl(v,pattern=paste(list.files(pattern="zip$"),collapse="|"))]
+    }
+    toFetch <- paste("http://forest.moscowfsl.wsu.edu/climate/current/allNA/derivedGrids/",zips,sep="")
+      for(i in 1:length(toFetch)){ utils::download.file(toFetch[i], destfile=zips[i]) }
   }
   v <- c("dd5.zip","ffp.zip","map.zip","mat_tenths.zip")
   return(lapply(v,unpackClimateVars))
@@ -266,7 +270,7 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(m
   ssurgo_variables <- out
   # clean-up
   endCluster();
-  rm(o,f);
+  rm(out,f);
 } else {
   cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
   out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
@@ -281,7 +285,7 @@ if(!file.exists(paste(argv[1],"_satThick_10_14.tif",sep=""))){
       aquiferSatThickness <- projectRaster(aquiferSatThickness,crs=CRS(projection(s)))
         aquiferSatThickness <- crop(aquiferSatThickness,extent(s))
           aquiferSatThickness <- resample(aquiferSatThickness,ssurgo_variables[[1]],method='bilinear')
-    extent(aquiferSatThickness) <- alignExtent(aquiferSatThickness,out[[1]])
+    extent(aquiferSatThickness) <- alignExtent(aquiferSatThickness,ssurgo_variables[[1]])
       writeRaster(aquiferSatThickness,paste(argv[1],"_satThick_10_14.tif",sep=""),overwrite=T)
   } else {
     stop("couldn't find an appropriate saturated thickness raster in the CWD")
