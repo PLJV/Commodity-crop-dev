@@ -7,6 +7,7 @@
 # a single county, per v.1.0.
 
 require(rgdal)
+require(rgeos)
 require(raster)
 require(utils)
 require(soilDB)
