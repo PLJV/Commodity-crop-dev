@@ -228,7 +228,59 @@ fetchClimateVariables <- function(){
   v <- c("dd5.zip","ffp.zip","map.zip","mat_tenths.zip")
   return(lapply(v,unpackClimateVars))
 }
-
+#
+# fetchTopographicData()
+# wrapper function for FedData::get_ned()
+#
+fetchTopographicData <- function(x,useLocal=FALSE){
+  if(useLocal){
+    return(lapply(topographic_variables,FUN=raster))
+  }
+  # calculate from a live DEM we fetch from NED
+  if(!require(FedData)) stop("'fedData' package not available -- please install")
+  x <- get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp")
+  topo_output <- list()
+    topo_output[[1]] <- x # elevation
+    topo_output[[2]] <- raster::focal(x,w=matrix(1,nrow=3,ncol=3),fun=sd,na.rm=T) # StdDevElev (3x3)
+    topo_output[[3]] <- raster::terrain(x,opt='aspect',neighbors=8,unit='degrees')
+    topo_output[[4]] <- raster::focal(x, w=matrix(1,nrow=27,ncol=27), fun=function(x, ...) max(x) - min(x),pad=TRUE, padValue=NA, na.rm=TRUE)
+    topo_output[[5]] <- raster::focal(x, w=matrix(1,nrow=3,ncol=3), fun=function(x, ...) max(x) - min(x),pad=TRUE, padValue=NA, na.rm=TRUE)
+    topo_output[[6]] <- raster::terrain(x,opt='slope',neighbors=8,unit='degrees')
+  return(topo_output)
+}
+#
+# snapTo()
+# Ensure absolute consistency between raster objects by cropping,projecting,snapping,and (if asked) resampling
+# a raster object using a template
+#
+snapTo <- function(x,to=NULL,names=NULL,method='bilinear'){
+  require(parallel)
+  # set-up a cluster for parallelization
+  cl <- makeCluster((parallel::detectCores()-1))
+  # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
+  if(grepl(tolower(class(x)),pattern="character")){ lapply(x,FUN=raster) }
+  e <- as(extent(to[[1]]),'SpatialPolygons')
+    projection(e) <- CRS(projection(to[[1]]))
+  if(class(x) == "list") {
+    x <- parLapply(cl,x,fun=raster::crop,extent(spTransform(e,CRS(projection(x[[1]])))))
+      x <- parLapply(cl,x,fun=raster::projectRaster,crs=CRS(projection(to[[1]])))
+    extents <- lapply(x,alignExtent,to[[1]])
+      for(i in 1:length(x)){ extent(x[[i]]) <- extents[[i]] }
+    if(!is.null(method)){
+      x <- parLapply(cl,x,fun=resample,y=to[[1]],method=method)
+    }
+  } else {
+    x <- raster::crop(x,extent(spTransform(e,CRS(projection(x)))))
+      x <- raster::projectRaster(x,crs=CRS(projection(to[[1]])))
+    extent <- alignExtent(x,to[[1]])
+      extent(x) <- extent
+    if(!is.null(method)){
+      x <- raster::resample(x,y=to[[1]],method=method)
+    }
+  }
+  endCluster()
+  return(x)
+}
 #
 # MAIN
 #
@@ -302,10 +354,11 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(c
   cat(" -- processing source climate data\n")
   names <- substr(climate_variables,1,nchar(climate_variables)-4)
   climate_variables <- fetchClimateVariables()
+    # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
     climate_variables <- parLapply(cl,climate_variables,fun=raster::crop,spTransform(s,CRS(projection(climate_variables[[1]]))))
       climate_variables <- parLapply(cl,climate_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
-      extents <- lapply(climate_variables,alignExtent,ssurgo_variables[[1]])
-        for(i in 1:length(climate_variables)){ extent(climate_variables[[i]]) <- extents[[i]] }
+        extents <- lapply(climate_variables,alignExtent,ssurgo_variables[[1]])
+          for(i in 1:length(climate_variables)){ extent(climate_variables[[i]]) <- extents[[i]] }
   climate_variables <- parLapply(cl,climate_variables,fun=crop,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
     climate_variables <- parLapply(cl,climate_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
       for(i in 1:length(climate_variables)){ lWriteRaster(climate_variables[[i]],y=names[i],cName=argv[1]) }
@@ -320,18 +373,17 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(c
 # calculate our topographic landscape variables
 if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(topographic_variables,collapse='|'))) < length(topographic_variables)){
   cat(" -- processing topographic data\n")
-  # set-up a cluster for parallelization
-  cl <- makeCluster((parallel::detectCores()-1))
-
-  names <- substr(topographic_variables,1,nchar(topographic_variables)-4)
-  topographic_variables <- lapply(topographic_variables,FUN=raster)
-    topographic_variables <- parLapply(cl,topographic_variables,fun=raster::crop,extent(spTransform(s,CRS(projection(topographic_variables[[1]]))))) # these are very large.  Going to crop to extent of study region first
-      topographic_variables <- parLapply(cl,topographic_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
-  extents <- lapply(topographic_variables,alignExtent,ssurgo_variables[[1]])
-    for(i in 1:length(topographic_variables)){ extent(topographic_variables[[i]]) <- extents[[i]] }
-  topographic_variables <- parLapply(cl,topographic_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
+    names <- substr(topographic_variables,1,nchar(topographic_variables)-4)
+    # fetch our topographic variables if they are not available locally
+    if(sum(grepl(list.files(pattern="tif$"),pattern=paste(topographic_variables,collapse="|"))) == length(topographic_variables)){
+      topographic_variables <- fetchTopographicData(topographic_variables,useLocal=T)
+    } else {
+      topographic_variables <- fetchTopographicData(ssurgo_variables[[1]],useLocal=F)
+    }
+    # snap to the extent and resolution of our ssurgo variables
+    topographic_variables <- snapTo(topographic_variables,to=ssurgo_variables[[1]])
+    # write to disk
     for(i in 1:length(topographic_variables)){ lWriteRaster(topographic_variables[[i]],y=names[i],cName=argv[1]) }
-  endCluster()
 } else {
   cat(paste(" -- existing topographic rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
   out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
