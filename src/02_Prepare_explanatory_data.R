@@ -302,7 +302,8 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(c
   cat(" -- processing source climate data\n")
   names <- substr(climate_variables,1,nchar(climate_variables)-4)
   climate_variables <- fetchClimateVariables()
-    climate_variables <- parLapply(cl,climate_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
+    climate_variables <- parLapply(cl,climate_variables,fun=raster::crop,spTransform(s,CRS(projection(climate_variables[[1]]))))
+      climate_variables <- parLapply(cl,climate_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
       extents <- lapply(climate_variables,alignExtent,ssurgo_variables[[1]])
         for(i in 1:length(climate_variables)){ extent(climate_variables[[i]]) <- extents[[i]] }
   climate_variables <- parLapply(cl,climate_variables,fun=crop,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
@@ -329,7 +330,7 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(t
   extents <- lapply(topographic_variables,alignExtent,ssurgo_variables[[1]])
     for(i in 1:length(topographic_variables)){ extent(topographic_variables[[i]]) <- extents[[i]] }
   topographic_variables <- parLapply(cl,topographic_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
-  for(i in 1:length(topographic_variables)){ lWriteRaster(topographic_variables[[i]],y=names[i],cName=argv[1]) }
+    for(i in 1:length(topographic_variables)){ lWriteRaster(topographic_variables[[i]],y=names[i],cName=argv[1]) }
   endCluster()
 } else {
   cat(paste(" -- existing topographic rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
