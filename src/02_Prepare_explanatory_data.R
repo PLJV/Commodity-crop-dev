@@ -12,6 +12,7 @@ require(raster)
 require(utils)
 require(soilDB)
 require(parallel)
+require(FedData)
 require(landscapeAnalysis)
 
 argv <- commandArgs(trailingOnly=T)
@@ -21,22 +22,24 @@ argv <- commandArgs(trailingOnly=T)
 #
 
 # climate variables to be calculated from Reihfeldt
-climate_variables <- c(
-                        "dd5.tif",
-                        "ffp.tif",
-                        "map.tif",
-                        "mat_tenths.tif"
-                      )
+climate_variables <-
+  c(
+    "dd5.tif",
+    "ffp.tif",
+    "map.tif",
+    "mat_tenths.tif"
+  )
 
-# topographic variables precalculated from DEM
-topographic_variables <- c(
-                            "elevation.tif",
-                            "elevationStdDev3.tif",
-                            "aspect.tif",
-                            "rough27.tif",
-                            "rough3.tif",
-                            "slope.tif"
-                          )
+# topographic variables calculated from DEM
+topographic_variables <-
+  c(
+    "elevation.tif",
+    "elevationStdDev3.tif",
+    "aspect.tif",
+    "rough27.tif",
+    "rough3.tif",
+    "slope.tif"
+  )
 
 # SSURGO variables calculated from muaggatt tables
 muaggatt_variables <-
@@ -59,13 +62,6 @@ muaggatt_variables <-
    "iccdcdpct",       # Irrigated Capability Class  - Dominant Condition Aggregate Percent
    "hydclprs",        # Hydric Classification - Presence
    "niccdcd")         # Non-Irrigated Capability Class - Dominant Condition
-#
-# lWriteRaster()
-#
-lWriteRaster <- function(x,y,cName=NULL){
-  require(raster);
-  raster::writeRaster(x,filename=paste(cName,"_",y,".tif",sep=""),overwrite=T,format="GTiff")
-}
 #
 # floodFrequencyToOrdinal()
 # For floodfreqmax, floodfreqdcd
@@ -233,19 +229,20 @@ fetchClimateVariables <- function(){
 # wrapper function for FedData::get_ned()
 #
 fetchTopographicData <- function(x,useLocal=FALSE){
+  # parse list or individual raster object
   if(useLocal){
     return(lapply(topographic_variables,FUN=raster))
   }
   # calculate from a live DEM we fetch from NED
   if(!require(FedData)) stop("'fedData' package not available -- please install")
-  x <- get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp")
+  x <- get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T)
   topo_output <- list()
     topo_output[[1]] <- x # elevation
     topo_output[[2]] <- raster::focal(x,w=matrix(1,nrow=3,ncol=3),fun=sd,na.rm=T) # StdDevElev (3x3)
-    topo_output[[3]] <- raster::terrain(x,opt='aspect',neighbors=8,unit='degrees')
+    topo_output[[3]] <- raster::terrain(x,opt='aspect',neighbors=8)
     topo_output[[4]] <- raster::focal(x, w=matrix(1,nrow=27,ncol=27), fun=function(x, ...) max(x) - min(x),pad=TRUE, padValue=NA, na.rm=TRUE)
     topo_output[[5]] <- raster::focal(x, w=matrix(1,nrow=3,ncol=3), fun=function(x, ...) max(x) - min(x),pad=TRUE, padValue=NA, na.rm=TRUE)
-    topo_output[[6]] <- raster::terrain(x,opt='slope',neighbors=8,unit='degrees')
+    topo_output[[6]] <- raster::terrain(x,opt='slope',neighbors=8)
   return(topo_output)
 }
 #
@@ -281,6 +278,14 @@ snapTo <- function(x,to=NULL,names=NULL,method='bilinear'){
   endCluster()
   return(x)
 }
+#
+# lWriteRaster()
+#
+lWriteRaster <- function(x,y,cName=NULL){
+  require(raster);
+    raster::writeRaster(x,filename=paste(cName,"_",y,".tif",sep=""),overwrite=T,format="GTiff")
+}
+
 #
 # MAIN
 #
@@ -359,9 +364,9 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(c
       climate_variables <- parLapply(cl,climate_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
         extents <- lapply(climate_variables,alignExtent,ssurgo_variables[[1]])
           for(i in 1:length(climate_variables)){ extent(climate_variables[[i]]) <- extents[[i]] }
-  climate_variables <- parLapply(cl,climate_variables,fun=crop,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
-    climate_variables <- parLapply(cl,climate_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
-      for(i in 1:length(climate_variables)){ lWriteRaster(climate_variables[[i]],y=names[i],cName=argv[1]) }
+    climate_variables <- parLapply(cl,climate_variables,fun=crop,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
+      climate_variables <- parLapply(cl,climate_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
+        for(i in 1:length(climate_variables)){ lWriteRaster(climate_variables[[i]],y=names[i],cName=argv[1]) }
   endCluster()
 } else {
   cat(paste(" -- existing climate rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
@@ -375,11 +380,7 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(t
   cat(" -- processing topographic data\n")
     names <- substr(topographic_variables,1,nchar(topographic_variables)-4)
     # fetch our topographic variables if they are not available locally
-    if(sum(grepl(list.files(pattern="tif$"),pattern=paste(topographic_variables,collapse="|"))) == length(topographic_variables)){
-      topographic_variables <- fetchTopographicData(topographic_variables,useLocal=T)
-    } else {
-      topographic_variables <- fetchTopographicData(ssurgo_variables[[1]],useLocal=F)
-    }
+    topographic_variables <- fetchTopographicData(ssurgo_variables[[1]],useLocal=F)
     # snap to the extent and resolution of our ssurgo variables
     topographic_variables <- snapTo(topographic_variables,to=ssurgo_variables[[1]])
     # write to disk
