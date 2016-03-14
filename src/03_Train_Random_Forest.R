@@ -3,8 +3,7 @@ require(rgdal)
 require(randomForest)
 require(rfUtilities)
 
-#argv <- commandArgs(trailingOnly=T)
-argv <- "focal_county_146"
+argv <- commandArgs(trailingOnly=T)
 
 #
 # Local functions
@@ -97,55 +96,57 @@ qaCheck_findConvergence <- function(m=NULL,chunkSize=100){
 #
 # MAIN
 #
-cat(" -- training random forests\n")
-# read-in our training data
-training_pts <- readOGR(".",paste(argv,"_farmed_binary_pts",sep=""),verbose=F)
-# read-in our explanatory data
-expl_vars <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
-  expl_vars <- expl_vars[!grepl(expl_vars,pattern="farmed")]
-    expl_vars <- lapply(expl_vars,FUN=raster)
-      expl_vars <- raster::stack(expl_vars)
-names <- names(expl_vars)
-  names <- unlist(strsplit(names,split="_"))
-    names <- names[!grepl(names,pattern="county|focal")]
-      names <- names[suppressWarnings(is.na(as.numeric(names)))]
-        names <- names[which(grepl(names(expl_vars),pattern=paste(names,collapse="|")))]
-          names(expl_vars) <- names
-# extract across our training points
-training_pts_ <- training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),] # the geometry of our SSURGO data can be limiting here...
-  if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
-    training_table <- extract(expl_vars,training_pts,df=T)
-      training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
-# QA Check our training data
-training_table$slope[is.na(training_table$slope)] <- 0
+if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
+  cat(" -- training random forests\n")
+  # read-in our training data
+  training_pts <- readOGR(".",paste(argv[1],"_farmed_binary_pts",sep=""),verbose=F)
+  # read-in our explanatory data
+  expl_vars <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
+    expl_vars <- expl_vars[!grepl(expl_vars,pattern="farmed")]
+      expl_vars <- lapply(expl_vars,FUN=raster)
+        expl_vars <- raster::stack(expl_vars)
+  names <- names(expl_vars)
+    names <- unlist(strsplit(names,split="_"))
+      names <- names[!grepl(names,pattern="county|focal")]
+        names <- names[suppressWarnings(is.na(as.numeric(names)))]
+          names <- names[which(grepl(names(expl_vars),pattern=paste(names,collapse="|")))]
+            names(expl_vars) <- names
+  # extract across our training points
+  training_pts_ <- training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),] # the geometry of our SSURGO data can be limiting here...
+    if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
+      training_table <- extract(expl_vars,training_pts,df=T)
+        training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
+  # QA Check our training data
+  training_table$slope[is.na(training_table$slope)] <- 0
 
-training_table <- qaCheck_dropVarsWithAbundantNAs(training_table)
-training_table <- qaCheck_checkBalancedClasses(training_table)
-training_table <- qaCheck_multiColinearity(training_table)
-# Train a preliminary forest
+  training_table <- qaCheck_dropVarsWithAbundantNAs(training_table)
+  training_table <- qaCheck_checkBalancedClasses(training_table)
+  training_table <- qaCheck_multiColinearity(training_table)
+  # Train a preliminary forest
 
-cat("## Preliminary Burn-in/Evaluative Forest ##")
-m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
-# Post-hoc QA check variable importance
-training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
+  cat("## Preliminary Burn-in/Evaluative Forest ##")
+  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
+  # Post-hoc QA check variable importance
+  training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
 
-cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
-m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
-  rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=F)
+  cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
+  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
+    rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=F)
 
-cat(" -- predicting across explanatory raster series for focal county:\n")
-  r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables
-    r_predicted <- predict(r_projected,model=rf.final,progress='text',type='prob',na.rm=T,inf.rm=T,index=2) # index=2 specifies the "occurrence" (1) class from our forest
+  cat(" -- predicting across explanatory raster series for focal county:\n")
+    r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables
+      r_predicted <- predict(r_projected,model=rf.final,progress='text',type='prob',na.rm=T,inf.rm=T,index=2) # index=2 specifies the "occurrence" (1) class from our forest
 
-cat(" -- saving results to disk\n")
-session <- new.env()
-assign("rf.final",value=m,env=session)
-  assign("training_table",value=training_table,env=session)
-    assign("expl_vars",value=expl_vars,env=session)
-  assign("training_pts",value=training_pts,env=session)
-assign("r_predicted",value=r_predicted,env=session)
+  cat(" -- saving results to disk\n")
+  session <- new.env()
+  assign("rf.final",value=m,env=session)
+    assign("training_table",value=training_table,env=session)
+      assign("expl_vars",value=expl_vars,env=session)
+    assign("training_pts",value=training_pts,env=session)
+  assign("r_predicted",value=r_predicted,env=session)
 
-writeRaster(r_predicted,paste(argv[1],"_prob_occ.tif",sep=""),overwrite=T)
-save(list=ls(session),envir=session,file=paste(argv[1],"_model.rdata",sep=""),compress=T)
+  writeRaster(r_predicted,paste(argv[1],"_prob_occ.tif",sep=""),overwrite=T)
+  save(list=ls(session),envir=session,file=paste(argv[1],"_model.rdata",sep=""),compress=T)
 
-cat(" -- done\n")
+  cat(" -- done\n")
+}
