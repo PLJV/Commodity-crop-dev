@@ -236,6 +236,9 @@ fetchTopographicData <- function(x,useLocal=FALSE){
   }
   # calculate from a live DEM we fetch from NED
   if(!require(FedData)) stop("'fedData' package not available -- please install")
+  # clean-up any lurking temp file space.  Sometimes get_net doesn't do this all the way.
+  unlink("/tmp/1",recursive=T,force=T)
+    unlink("/tmp/dem",recursive=T,force=T)
   x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T))
     while(class(x_) == "try-error"){ x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T)) }
       x <- x_; rm(x_)
@@ -286,7 +289,13 @@ snapTo <- function(x,to=NULL,names=NULL,method='bilinear'){
 #
 lWriteRaster <- function(x,y,cName=NULL){
   require(raster);
+  if(is.list(x)){
+    for(i in 1:length(x)){
+      raster::writeRaster(x[[i]],filename=paste(cName,"_",y[i],".tif",sep=""),overwrite=T,format="GTiff")
+    }
+  } else {
     raster::writeRaster(x,filename=paste(cName,"_",y,".tif",sep=""),overwrite=T,format="GTiff")
+  }
 }
 
 #
@@ -326,7 +335,7 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(m
     for(i in 1:length(names(county_polygons))){ out[[length(out)+1]] <- county_polygons[,names(county_polygons)[i]] }
       f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
         out <- parLapply(cl,out,fun=f,progress=NULL)
-          for(i in 1:length(out)){ lWriteRaster(out[[i]],y=names(county_polygons)[i],cName=argv[1]) }
+          lWriteRaster(out,y=names(county_polygons),cName=argv[1])
 
   ssurgo_variables <- out
   # clean-up
@@ -343,11 +352,8 @@ if(!file.exists(paste(argv[1],"_satThick_10_14.tif",sep=""))){
   cat(" -- cropping, resampling, and snapping aquifer saturated thickness so that it is consistent with our SSURGO variables\n")
   if(file.exists("satThick_10_14.tif")){
     aquiferSatThickness <- raster("satThick_10_14.tif")
-      aquiferSatThickness <- projectRaster(aquiferSatThickness,crs=CRS(projection(s)))
-        aquiferSatThickness <- crop(aquiferSatThickness,extent(s))
-          aquiferSatThickness <- resample(aquiferSatThickness,ssurgo_variables[[1]],method='bilinear')
-    extent(aquiferSatThickness) <- alignExtent(aquiferSatThickness,ssurgo_variables[[1]])
-      writeRaster(aquiferSatThickness,paste(argv[1],"_satThick_10_14.tif",sep=""),overwrite=T)
+      aquiferSatThickness <- snapTo(aquiferSatThickness,ssurgo_variables[[1]])
+        writeRaster(aquiferSatThickness,paste(argv[1],"_satThick_10_14.tif",sep=""),overwrite=T)
   } else {
     stop("couldn't find an appropriate saturated thickness raster in the CWD")
   }
@@ -363,13 +369,8 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(c
   names <- substr(climate_variables,1,nchar(climate_variables)-4)
   climate_variables <- fetchClimateVariables()
     # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
-    climate_variables <- parLapply(cl,climate_variables,fun=raster::crop,spTransform(s,CRS(projection(climate_variables[[1]]))))
-      climate_variables <- parLapply(cl,climate_variables,fun=raster::projectRaster,crs=CRS(projection(s)))
-        extents <- lapply(climate_variables,alignExtent,ssurgo_variables[[1]])
-          for(i in 1:length(climate_variables)){ extent(climate_variables[[i]]) <- extents[[i]] }
-    climate_variables <- parLapply(cl,climate_variables,fun=crop,landscapeAnalysis::multiplyExtent(extent(s))*1.05)
-      climate_variables <- parLapply(cl,climate_variables,fun=resample,y=ssurgo_variables[[1]],method='bilinear')
-        for(i in 1:length(climate_variables)){ lWriteRaster(climate_variables[[i]],y=names[i],cName=argv[1]) }
+    climate_variables <- snapTo(climate_variables,ssurgo_variables[[1]])
+     lWriteRaster(climate_variables,y=names,cName=argv[1])
   endCluster()
 } else {
   cat(paste(" -- existing climate rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
@@ -387,7 +388,7 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(t
     # snap to the extent and resolution of our ssurgo variables
     topographic_variables <- snapTo(topographic_variables,to=ssurgo_variables[[1]])
     # write to disk
-    for(i in 1:length(topographic_variables)){ lWriteRaster(topographic_variables[[i]],y=names[i],cName=argv[1]) }
+    lWriteRaster(topographic_variables,y=names,cName=argv[1])
 } else {
   cat(paste(" -- existing topographic rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
   out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))

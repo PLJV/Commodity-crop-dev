@@ -75,7 +75,7 @@ chunk <- function(x,size=200){
 # Use a quick likelihood ratio to find chunks that are significantly (p>=95%) different than the tail of
 # OOB error observed in a random forest object.  Report the right-hand side (upper-bound) of the last significant
 # chunk back to the user to help establish a cut-off for re-training a forest.  This is an approximation of a moving
-# window analysis (or perhaps, a non-moving window analysis... ;-))to find a value appropriate for twice-the-rate-of-convergence 
+# window analysis (or perhaps, a non-moving window analysis... ;-))to find a value appropriate for twice-the-rate-of-convergence
 # rule usually applied to picking an appropriate ntrees parameter for randomForest.
 #
 qaCheck_findConvergence <- function(m=NULL,chunkSize=100){
@@ -112,9 +112,10 @@ names <- names(expl_vars)
         names <- names[which(grepl(names(expl_vars),pattern=paste(names,collapse="|")))]
           names(expl_vars) <- names
 # extract across our training points
-training_pts <- training_pts[!is.na(extract(expl_vars$iccdcdpct,training_pts)),] # the geometry of our SSURGO data can be limiting here...
-  training_table <- extract(expl_vars,training_pts,df=T)
-    training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
+training_pts_ <- training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),] # the geometry of our SSURGO data can be limiting here...
+  if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
+    training_table <- extract(expl_vars,training_pts,df=T)
+      training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
 # QA Check our training data
 training_table$slope[is.na(training_table$slope)] <- 0
 
