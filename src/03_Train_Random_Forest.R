@@ -75,12 +75,12 @@ chunk <- function(x,size=200){
 # Use a quick likelihood ratio to find chunks that are significantly (p>=95%) different than the tail of
 # OOB error observed in a random forest object.  Report the right-hand side (upper-bound) of the last significant
 # chunk back to the user to help establish a cut-off for re-training a forest.  This is an approximation of a moving
-# window analysis to find a value appropriate for twice-the-rate-of-convergence rule usually applied to picking an
-# appropriate ntrees parameter for randomForest.
+# window analysis (or perhaps, a non-moving window analysis... ;-))to find a value appropriate for twice-the-rate-of-convergence 
+# rule usually applied to picking an appropriate ntrees parameter for randomForest.
 #
-qaCheck_findConvergence <- function(m=NULL,size=100){
+qaCheck_findConvergence <- function(m=NULL,chunkSize=100){
   err <- abs(diff(diff(m$err.rate[,1])))
-    err <- chunk(err,size=size)
+    err <- chunk(err,size=chunkSize)
 
   tailTrainingData <- as.vector(unlist(err[length(err)-3:length(err)]))
     tailTrainingData <- c(mean(tailTrainingData),sd(tailTrainingData))
@@ -92,12 +92,12 @@ qaCheck_findConvergence <- function(m=NULL,size=100){
     sigs <- sigs >= 1.96
       sigs <- max(which(sigs==TRUE))
 
-  return(sigs*size)
+  return(sigs*chunkSize)
 }
 #
 # MAIN
 #
-
+cat(" -- training random forests\n")
 # read-in our training data
 training_pts <- readOGR(".",paste(argv,"_farmed_binary_pts",sep=""),verbose=F)
 # read-in our explanatory data
@@ -121,12 +121,30 @@ training_table$slope[is.na(training_table$slope)] <- 0
 training_table <- qaCheck_dropVarsWithAbundantNAs(training_table)
 training_table <- qaCheck_checkBalancedClasses(training_table)
 training_table <- qaCheck_multiColinearity(training_table)
-# train a preliminary forest
+# Train a preliminary forest
+
+cat("## Preliminary "Burn-in"/Evaluative Forest ##")
 m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
 # Post-hoc QA check variable importance
 training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
-# Re-train a final forest, optimizing based on convergence of OOB error in the final forest
+
+cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
 m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
-  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(mod,size=5)*2,do.trace=T)
-# Save our model object to disk
-save.image(paste(argv[1],"_model.rdata",sep=""))
+  rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=F)
+
+cat(" -- predicting across explanatory raster series for focal county:\n")
+  r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables
+    r_predicted <- predict(r_projected,model=rf.final,progress='text',type='prob',na.rm=T,inf.rm=T,index=2) # index=2 specifies the "occurrence" (1) class from our forest
+
+cat(" -- saving results to disk\n")
+session <- new.env()
+assign("rf.final",value=m,env=session)
+  assign("training_table",value=training_table,env=session)
+    assign("expl_vars",value=expl_vars,env=session)
+  assign("training_pts",value=training_pts,env=session)
+assign("r_predicted",value=r_predicted,env=session)
+
+writeRaster(r_predicted,paste(argv[1],"_prob_occ.tif",sep=""),overwrite=T)
+save(list=ls(session),envir=session,file=paste(argv[1],"_model.rdata",sep=""),compress=T)
+
+cat(" -- done\n")
