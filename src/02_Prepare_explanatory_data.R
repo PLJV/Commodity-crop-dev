@@ -5,6 +5,7 @@
 # Cleaning-up and refactoring previous implementation so that it is pure 'R' and more closely follows functional
 # design principles for v.2.0.  Adding the ability to generate training data across broader geographic extents than
 # a single county, per v.1.0.
+#
 
 require(rgdal)
 require(rgeos)
