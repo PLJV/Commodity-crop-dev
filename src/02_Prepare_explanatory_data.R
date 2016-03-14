@@ -236,7 +236,9 @@ fetchTopographicData <- function(x,useLocal=FALSE){
   }
   # calculate from a live DEM we fetch from NED
   if(!require(FedData)) stop("'fedData' package not available -- please install")
-  x <- get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T)
+  x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T))
+    while(class(x_) == "try-error"){ x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T)) }
+      x <- x_; rm(x_)
   topo_output <- list()
     topo_output[[1]] <- x # elevation
     topo_output[[2]] <- raster::focal(x,w=matrix(1,nrow=3,ncol=3),fun=sd,na.rm=T) # StdDevElev (3x3)

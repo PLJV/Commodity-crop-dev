@@ -35,6 +35,8 @@ downsamplePtsToMinimum <- function(x,y){
 # MAIN
 #
 
+
+if(sum(grepl(list.files(pattern="shp"),pattern=paste(argv[2],"_farmed_binary_pts",sep="")))==0){
 nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$",full.names=T),FUN=raster)
           b <- spTransform(readOGR(".",argv[2],verbose=F),CRS(projection(nassImagery[[1]])))
 
@@ -64,3 +66,4 @@ presences <- raster::sampleRandom(subs(r,data.frame(1,1),by=1,which=2,subsWithNA
   absences@data[,1] <- 0
 pts <- downsamplePtsToMinimum(presences,absences); rm(presences,absences)
 writeOGR(pts,".",paste(argv[2],"_farmed_binary_pts",sep=""), driver="ESRI Shapefile",overwrite=T)
+}

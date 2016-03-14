@@ -123,7 +123,7 @@ training_table <- qaCheck_checkBalancedClasses(training_table)
 training_table <- qaCheck_multiColinearity(training_table)
 # Train a preliminary forest
 
-cat("## Preliminary "Burn-in"/Evaluative Forest ##")
+cat("## Preliminary Burn-in/Evaluative Forest ##")
 m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
 # Post-hoc QA check variable importance
 training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
