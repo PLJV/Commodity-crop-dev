@@ -6,9 +6,24 @@
 # e.g., 02001, 52113
 #
 
-require(rgdal)
-require(raster)
-require(utils)
+include <- function(x,from="cran",repo=NULL){
+  if(from == "cran"){
+    if(!do.call(require,as.list(x))) install.packages(x, repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+    if(!do.call(require,as.list(x))) stop("auto installation of package ",x," failed.\n")
+  } else if(from == "github"){
+    if(!do.call(require,as.list(x))){
+      if(!do.call(require,as.list('devtools'))) install.packages('devtools', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+      require('devtools');
+      install_github(paste(repo,x,sep="/"));
+    }
+  } else{
+    stop(paste("could find package:",x))
+  }
+}
+
+include(rgdal)
+include(raster)
+include(utils)
 
 argv <- commandArgs(trailingOnly=T)
 

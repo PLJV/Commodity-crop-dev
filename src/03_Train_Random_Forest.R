@@ -2,12 +2,12 @@ argv <- commandArgs(trailingOnly=T)
 
 include <- function(x,from="cran",repo=NULL){
   if(from == "cran"){
-    if(!do.call(include,as.list(x))) install.packages(x, repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
-    if(!do.call(include,as.list(x))) stop("auto installation of package ",x," failed.\n")
+    if(!do.call(require,as.list(x))) install.packages(x, repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+    if(!do.call(require,as.list(x))) stop("auto installation of package ",x," failed.\n")
   } else if(from == "github"){
-    if(!do.call(include,as.list(x))){
-      if(!do.call(include,as.list('devtools'))) install.packages('devtools', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
-      include('devtools');
+    if(!do.call(require,as.list(x))){
+      if(!do.call(require,as.list('devtools'))) install.packages('devtools', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+      require('devtools');
       install_github(paste(repo,x,sep="/"));
     }
   } else{
