@@ -7,14 +7,29 @@
 # a single county, per v.1.0.
 #
 
-require(rgdal)
-require(rgeos)
-require(raster)
-require(utils)
-require(soilDB)
-require(parallel)
-require(FedData)
-require(landscapeAnalysis)
+include <- function(x,from="cran",repo=NULL){
+  if(from == "cran"){
+    if(!do.call(include,as.list(x))) install.packages(x, repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+    if(!do.call(include,as.list(x))) stop("auto installation of package ",x," failed.\n")
+  } else if(from == "github"){
+    if(!do.call(include,as.list(x))){
+      if(!do.call(include,as.list('devtools'))) install.packages('devtools', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+      include('devtools');
+      install_github(paste(repo,x,sep="/"));
+    }
+  } else{
+    stop(paste("could find package:",x))
+  }
+}
+
+include('rgdal')
+include('rgeos')
+include('raster')
+include('utils')
+include('soilDB')
+include('parallel')
+include('FedData')
+include('landscapeAnalysis')
 
 argv <- commandArgs(trailingOnly=T)
 
@@ -144,16 +159,21 @@ getMapunitGeomFile <- function(){
 #
 calcMultiplier_mapunitGeomFile <- function(x){
   o<-readLines(x)
-  # if the thread was aborted, assume that it was because our BBOX was too large and we should step down
-  if(grepl(tolower(o[length(o)-1]),pattern="thread was being aborted")){
-    cat(" -- download aborted by gateway. check your bandwidth (are you downloading something else in the background?)\n")
-    return(-0.005) # if we simply experienced an abort, assume that we are running on the heavy side, but not so heavy that it's outrageous.
+  if(length(o)==0){
+    cat(" -- received zero length for downloaded file. Probably just an oopsie. Check Internet connection/temporary file space.  Retrying.\n")
+    return(0)
+  } else if(grepl(tolower(o[length(o)-1]),pattern="thread was being aborted")){
+    cat(" -- download request aborted by gateway. Either the BBOX was too large or something happened to our network connection\n")
+    return(-0.001) 
   } else if(grepl(tolower(o[length(o)-1]),pattern="exceeds the limit of")){
+    cat(" -- download request exceeded server BBOX size limits\n")
     return(-0.005)
   } else if(grepl(tolower(o[length(o)-3]),pattern="null>missing<")){
+    cat(" -- download request contained null geometry. It's likely that BBOX was too small and didn't contain any polygons\n")
     return(+0.005)
   } else {
-    stop("unhandled error from mapunit_geom_by_ll_bbox; see:",x)
+    return(0)
+    cat(" -- unhandled error from mapunit_geom_by_ll_bbox; see:",x)
   }
 }
 #
@@ -170,8 +190,9 @@ extentToSsurgoSpatialPolygons <- function(x){
   e <- try(mapunit_geom_by_ll_bbox(e))
   if(class(e) == "try-error"){
     while(class(e) == "try-error" && nrow(sizeHeurstics)<100){
-      Sys.sleep(1) # hobble by 1 second to limit likelihood of race-conditions in file I/O
-      cat("\n -- bounding-box heuristics optimizer, step:",nrow(sizeHeurstics),"\n\n")
+      cat("\n -- sleeping for 10 seconds to hobble our server requests\n")
+      Sys.sleep(10) # hobble by 10 second to give server a break and limit likelihood of race-conditions in temp file I/O
+      cat(" -- bounding-box heuristics optimizer, step:",nrow(sizeHeurstics),"\n\n")
       multiplier <- multiplier + calcMultiplier_mapunitGeomFile(getMapunitGeomFile())
       e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier))
         sizeHeurstics <- rbind(sizeHeurstics,data.frame(area=diff(c(e[1],e[3]))*diff(c(e[2],e[4])),multiplier=multiplier))
@@ -235,7 +256,7 @@ fetchTopographicData <- function(x,useLocal=FALSE){
     return(lapply(topographic_variables,FUN=raster))
   }
   # calculate from a live DEM we fetch from NED
-  if(!require(FedData)) stop("'fedData' package not available -- please install")
+  if(!include(FedData)) stop("'fedData' package not available -- please install")
   # clean-up any lurking temp file space.  Sometimes get_net doesn't do this all the way.
   unlink("/tmp/1",recursive=T,force=T)
     unlink("/tmp/dem",recursive=T,force=T)
@@ -257,7 +278,7 @@ fetchTopographicData <- function(x,useLocal=FALSE){
 # a raster object using a template
 #
 snapTo <- function(x,to=NULL,names=NULL,method='bilinear'){
-  require(parallel)
+  include(parallel)
   # set-up a cluster for parallelization
   cl <- makeCluster((parallel::detectCores()-1))
   # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
@@ -288,7 +309,7 @@ snapTo <- function(x,to=NULL,names=NULL,method='bilinear'){
 # lWriteRaster()
 #
 lWriteRaster <- function(x,y,cName=NULL){
-  require(raster);
+  include(raster);
   if(is.list(x)){
     for(i in 1:length(x)){
       raster::writeRaster(x[[i]],filename=paste(cName,"_",y[i],".tif",sep=""),overwrite=T,format="GTiff")
@@ -333,7 +354,7 @@ if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(m
   cat(" -- generating gridded raster surfaces from SSURGO polygons\n")
   out <- list(); # today, my brain can't make splitting a SpatialPolygons file by field into a list happen for some reason
     for(i in 1:length(names(county_polygons))){ out[[length(out)+1]] <- county_polygons[,names(county_polygons)[i]] }
-      f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
+      f <- function(x,y=NULL,progress=NULL){ include(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
         out <- parLapply(cl,out,fun=f,progress=NULL)
           lWriteRaster(out,y=names(county_polygons),cName=argv[1])
 

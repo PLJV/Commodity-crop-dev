@@ -1,9 +1,24 @@
-require(raster)
-require(rgdal)
-require(randomForest)
-require(rfUtilities)
-
 argv <- commandArgs(trailingOnly=T)
+
+include <- function(x,from="cran",repo=NULL){
+  if(from == "cran"){
+    if(!do.call(include,as.list(x))) install.packages(x, repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+    if(!do.call(include,as.list(x))) stop("auto installation of package ",x," failed.\n")
+  } else if(from == "github"){
+    if(!do.call(include,as.list(x))){
+      if(!do.call(include,as.list('devtools'))) install.packages('devtools', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+      include('devtools');
+      install_github(paste(repo,x,sep="/"));
+    }
+  } else{
+    stop(paste("could find package:",x))
+  }
+}
+
+include('raster')
+include('rgdal')
+include('randomForest')
+include('rfUtilities')
 
 #
 # Local functions
@@ -112,7 +127,7 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
           names <- names[which(grepl(names(expl_vars),pattern=paste(names,collapse="|")))]
             names(expl_vars) <- names
   # extract across our training points
-  training_pts_ <- training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),] # the geometry of our SSURGO data can be limiting here...
+  training_pts_ <- try(training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),]) # the geometry of our SSURGO data can be limiting here...
     if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
       training_table <- extract(expl_vars,training_pts,df=T)
         training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
@@ -125,12 +140,12 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
   # Train a preliminary forest
 
   cat("## Preliminary Burn-in/Evaluative Forest ##")
-  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
+  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1500,do.trace=T)
   # Post-hoc QA check variable importance
   training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
 
   cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
-  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=3000,do.trace=T)
+  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1500,do.trace=T)
     rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=F)
 
   cat(" -- predicting across explanatory raster series for focal county:\n")

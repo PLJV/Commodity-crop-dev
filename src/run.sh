@@ -1,12 +1,16 @@
 #!/bin/bash
 
-cd source_counties; 
-  todo=`ls -1 *.shp | awk '{ print substr($1,1,index($1,".")-1) }'`; 
-    cd ..;
+if [[ $# -ne 1 ]]; then
+  cd source_counties;
+    todo=`ls -1 *.shp | awk '{ print substr($1,1,index($1,".")-1) }'`;
+      cd ..;
+else
+  todo=$1
+fi
 
 for c in $todo; do
   if [ ! -r $c".7z" ]; then
-    echo "cp /home/ktaylora/nass/source_counties/"$c".*" $PWD/ | /bin/bash 
+    echo "cp "$PWD"/source_counties/"$c".*" $PWD/ | /bin/bash
     echo "time R --no-save --vanilla --slave --args . "$c" < 01_*.R" | /bin/bash
     echo "time R --no-save --vanilla --slave --args "$c" < 02_*.R" | /bin/bash
     echo "time R --no-save --vanilla --slave --args "$c" < 03_*.R" | /bin/bash

@@ -3,12 +3,27 @@
 # and (2) is a focal_county_NNNNN shapefile layer in the CWD.  This script is designed to be called from 00_
 #
 
-require(rgdal,quietly=T)
-require(raster,quietly=T)
-require(utils)
-require(landscapeAnalysis)
-
 argv <- commandArgs(trailingOnly=T)
+
+include <- function(x,from="cran",repo=NULL){
+  if(from == "cran"){
+    if(!do.call(require,as.list(x))) install.packages(x, repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+    if(!do.call(require,as.list(x))) stop("auto installation of package ",x," failed.\n")
+  } else if(from == "github"){
+    if(!do.call(require,as.list(x))){
+      if(!do.call(require,as.list('devtools'))) install.packages('devtools', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
+      require('devtools');
+      install_github(paste(repo,x,sep="/"));
+    }
+  } else{
+    stop(paste("could find package:",x))
+  }
+}
+
+include('rgdal')
+include('raster')
+include('utils')
+include('landscapeAnalysis')
 
 #
 # getNASSValuesByCropName()
@@ -35,6 +50,7 @@ downsamplePtsToMinimum <- function(x,y){
 # MAIN
 #
 
+cat(" -- processing NASS imagery for focal county:",argv[2],"\n")
 
 if(sum(grepl(list.files(pattern="shp"),pattern=paste(argv[2],"_farmed_binary_pts",sep="")))==0){
 nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$",full.names=T),FUN=raster)
