@@ -140,7 +140,7 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
   # Train a preliminary forest
 
   cat("## Preliminary Burn-in/Evaluative Forest ##")
-  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1500,do.trace=T)
+  rf.initial <- m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1500,do.trace=T)
   # Post-hoc QA check variable importance
   training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
 
@@ -154,7 +154,8 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
 
   cat(" -- saving results to disk\n")
   session <- new.env()
-  assign("rf.final",value=m,env=session)
+  assign("rf.initial",value=rf.initial,env=session)
+  assign("rf.final",value=rf.final,env=session)
     assign("training_table",value=training_table,env=session)
       assign("expl_vars",value=expl_vars,env=session)
     assign("training_pts",value=training_pts,env=session)
