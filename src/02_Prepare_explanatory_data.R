@@ -189,7 +189,7 @@ extentToSsurgoSpatialPolygons <- function(x){
     sizeHeurstics[1,2] <- multiplier                            # multiplier constant applied for our initial step
   e <- try(mapunit_geom_by_ll_bbox(e))
   if(class(e) == "try-error"){
-    while(class(e) == "try-error" && nrow(sizeHeurstics)<100){
+    while(class(e) == "try-error" && nrow(sizeHeurstics)<20){ # if we can't do this in 20 steps, there's a real problem...
       cat("\n -- sleeping for 10 seconds to hobble our server requests\n")
       Sys.sleep(10) # hobble by 10 second to give server a break and limit likelihood of race-conditions in temp file I/O
       cat(" -- bounding-box heuristics optimizer, step:",nrow(sizeHeurstics),"\n\n")
