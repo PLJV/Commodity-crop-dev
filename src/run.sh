@@ -10,6 +10,8 @@ fi
 
 for c in $todo; do
 if [ `ls -lh1 $c.7z | awk '{ print $5 }' | grep  "M" | wc -l` -eq 0 ]; then
+  if [ `ls -lh1 $c.7z | awk '{ print substr($5,1,index($5,"M")-1) }' | xargs printf "%.f" ` -lt 10 ]; then 
+    7za x $c.7z
     echo "cp "$PWD"/source_counties/"$c".*" $PWD/ | /bin/bash
     echo "time R --no-save --vanilla --slave --args . "$c" < 01_*.R" | /bin/bash
     echo "time R --no-save --vanilla --slave --args "$c" < 02_*.R" | /bin/bash
@@ -21,5 +23,6 @@ if [ `ls -lh1 $c.7z | awk '{ print $5 }' | grep  "M" | wc -l` -eq 0 ]; then
     echo "rm -rf "$c".dbf" | /bin/bash
     echo "rm -rf "$c"*.rdata" | /bin/bash
     echo "rm -rf "$c"*farmed_binary_pts*" | /bin/bash
+  fi
 fi
 done
