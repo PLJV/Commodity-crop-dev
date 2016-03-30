@@ -127,6 +127,43 @@ hydclprsToOrdinal <- function(x){
   return(as.numeric(x))
 }
 #
+# splitExtent()
+# When working with SDB queries for large areas, we consistently lose a lot of data... particularly for large
+# counties.  This gets around that by splitting an extent object into adjacent quarters so that we can download and
+# merge our raster segments later.  For small counties, this is inefficient.  But its better than just flatly attempting downloads
+#
+# Author: Kyle Taylor (kyle.taylor@pljv.org) [2016]
+#
+splitExtent <- function(e=NULL,multiple=2){
+  .include(raster)
+  # define our x/y vector ranges
+  x <- rep(NA,multiple+1)
+  y <- rep(NA,multiple+1)
+  # define the x/y range for calculating the size of our extents
+  xStep <- diff(c(e@xmin,e@xmax))/multiple
+  yStep <- diff(c(e@ymin,e@ymax))/multiple
+  # assign vertices to our product vectors
+  for(i in 1:(multiple+1)){
+    x[i] <- ifelse(i==1,
+                   min(e@xmin),
+                   x[i-1]+xStep)
+    y[i] <- ifelse(i==1,
+                   min(e@ymin),
+                   y[i-1]+yStep)
+  }
+  # assign our vertices to extent objects
+  extents <- as.list(rep(NA,multiple*multiple))
+  # iterate over our extents, assigning as we go
+  yStart <- i <- 1;
+  while(i <= length(extents)){
+    for(j in 1:multiple){ # stagger our y-values
+      extents[i] <- extent(c(x[j],x[j+1],y[yStart],y[yStart+1]))
+      i <- i+1;
+    }
+    yStart <- yStart+1;
+  }
+}
+#
 # extentToSoilDBCoords()
 #
 extentToSoilDBCoords <- function(e,useFloorCeiling=F) {
@@ -280,7 +317,7 @@ fetchTopographicData <- function(x,useLocal=FALSE){
 snapTo <- function(x,to=NULL,names=NULL,method='bilinear'){
   require(parallel)
   # set-up a cluster for parallelization
-  cl <- makeCluster((parallel::detectCores()-1))
+  cl <- makeCluster((parallel::detectCores()-4))
   # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
   if(grepl(tolower(class(x)),pattern="character")){ lapply(x,FUN=raster) }
   e <- as(extent(to[[1]]),'SpatialPolygons')
@@ -330,7 +367,7 @@ s <- readOGR(".",argv[1],verbose=F)
 # calculate our SSURGO soil variables, if needed
 if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(muaggatt_variables,collapse='|'))) < length(muaggatt_variables)){
   # set-up a cluster for parallelization
-  cl <- makeCluster(parallel::detectCores()-1)
+  cl <- makeCluster(parallel::detectCores()-4)
   # fetch and rasterize some SSURGO data
   county_polygons <- extentToSsurgoSpatialPolygons(s)
   # now get component and horizon-level data for these map unit keys
@@ -385,7 +422,7 @@ if(!file.exists(paste(argv[1],"_satThick_10_14.tif",sep=""))){
 # prepare our climate data
 if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(climate_variables,collapse='|'))) < length(climate_variables)){
   # set-up a cluster for parallelization
-  cl <- makeCluster((parallel::detectCores()-1))
+  cl <- makeCluster((parallel::detectCores()-4))
   cat(" -- processing source climate data\n")
   names <- substr(climate_variables,1,nchar(climate_variables)-4)
   climate_variables <- fetchClimateVariables()
