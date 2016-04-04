@@ -25,6 +25,36 @@ include('rfUtilities')
 #
 
 #
+# getImportance
+# Detemine variable importance from a random forest object using methods outlines by (fill-in-with-M.Murphy citation here)
+#
+getImportance <- function(m,metric="MDA",cutoff=NULL,plot=NULL){
+  n <- names(importance(m)[,3])
+  if(grepl(tolower(metric),pattern="mda")){ # Mean Decrease Accuracy
+    cutoff <- quantile(getImportance(m)[,3],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    importance <- as.vector(importance(m)[,3])/max(as.vector(importance(m)[,3]))
+  } else if(grepl(tolower(metric),pattern="positive-class")){ # Importance for predicting 1
+    cutoff <- quantile(getImportance(m)[,2],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    importance <- as.vector(importance(m)[,2])/max(as.vector(importance(m)[,2]))
+  } else if(grepl(tolower(metric),pattern="neg-class")){ # Importance for predicting 0
+    cutoff <- quantile(getImportance(m)[,1],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    importance <- as.vector(importance(m)[,1])/max(as.vector(importance(m)[,1]))
+  }
+  # plot a distribution of our scaled variable importance values? (useful for estimating cutoffs)
+  if(!is.null(plot)){
+    dev.new()
+    plot(density(importance),main=paste("metric=",metric,"; cut-off=",cutoff,sep=""),cex.main=0.8,cex=1.3,xlab="scaled importance value", ylab="density")
+    grid();grid();
+  }
+  # return the most important variables based on metric/cutoff value?
+  if(!is.null(cutoff)){
+    return(data.frame(var=n[importance>=cutoff],importance=importance[importance>=cutoff]))
+  }
+  return(data.frame(var=n,importance=importance))
+}
+
+
+#
 # qaCheck_dropVarsWithAbundantNAs()
 #
 qaCheck_dropVarsWithAbundantNAs <- function(t){
@@ -69,13 +99,10 @@ qaCheck_multiColinearity <- function(t){
 #
 #
 qaCheck_dropVarsWithPoorExplanatoryPower <- function(m=NULL,t=NULL,p=0.35,plot=FALSE){
-  o <- rfUtilities::rf.imp.freq(m,p=p,plot=plot)
-    o$frequency$var.freq <- o$frequency$var.freq/3
-  if(sum(o$frequency$var.freq == 0)>0){
-    cat(" -- (warning) dropping uninformative variables :",paste(as.vector(o$frequency$vars)[o$frequency$var.freq == 0],collapse=" "),"\n",sep="")
-    t <- cbind(response=t[,'response'],
-               t[,grepl(names(t),pattern=paste(as.vector(o$frequency$vars)[o$frequency$var.freq > 0.3],collapse="|"))])
-  }
+  cat(" -- (warning) dropping uninformative variables :",
+    paste(names(t)[!grepl(names(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))],"\n",sep=""))
+  t <- cbind(response=t[,'response'],
+             t[,grepl(names(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))])
   return(t)
 }
 #
