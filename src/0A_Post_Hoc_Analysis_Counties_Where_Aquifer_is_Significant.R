@@ -41,8 +41,9 @@ getFinalVariablesUsed <- function(x){
     load(m,envir=current_model_data)
       m <- get("rf.final",envir=current_model_data)
   # parse a clean list of our list of final variables (I apologize for the magic below)
-  predictors <- as.vector(na.omit(gsub(predictors,pattern=",|)|list|as.factor|response|\\(",replacement=NA)))
-  return(predictors)
+  predictors <- attributes(m$terms)$predvars
+    predictors <- as.vector(na.omit(gsub(predictors,pattern=",|)|list|as.factor|response|\\(",replacement=NA)))
+      return(predictors)
 }
 
 getImportance <- function(m,metric="MDA",cutoff=NULL,plot=NULL){
@@ -75,7 +76,7 @@ applyToModelWorkspace <- function(x=NULL,fun=NULL,m="rf.initial"){
   # parse out our random forest model from the model session in the x= project directory
   m <- list.files(x,pattern="_model.rdata",full.names=T)
     load(m,envir=current_model_data)
-      m <- get("rf.initial",envir=current_model_data)
+      m <- get(m,envir=current_model_data)
 
   return(fun(m))
 }
@@ -118,7 +119,8 @@ setwd("source_counties")
 s <- lapply(counties,FUN=readOGR,dsn=".",verbose=F)
 o <- s[[1]]
   for(i in 2:length(s)){ o <- raster::union(o,s[[i]]) }
-    o$sThickImp <- unlist(m_satThick_importance)
+    o$sThickImp <- unlist(m_satThick_importance) # relative importance of saturated thickness as a variable
+       o$usedST <- m_vars_used                   # saturated thickness was used in the final model
       writeOGR(o,"/home/ktaylora/Incoming","satThicknessImportance",driver="ESRI Shapefile",overwrite=T)
 
 # clean-up
