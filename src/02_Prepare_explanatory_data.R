@@ -457,6 +457,6 @@ main <- function(){
   }
 }
 
-if(exists(argv[1])) {
+if(!is.na(argv[1])) {
   main()
 }

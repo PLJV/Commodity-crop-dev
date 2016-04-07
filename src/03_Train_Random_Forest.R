@@ -28,16 +28,19 @@ include('rfUtilities')
 # getImportance
 # Detemine variable importance from a random forest object using methods outlines by (fill-in-with-M.Murphy citation here)
 #
-getImportance <- function(m,metric="MDA",cutoff=NULL,plot=NULL){
+getImportance <- function(m,metric="MDA",cutoff=0.35,plot=NULL){
   n <- names(importance(m)[,3])
   if(grepl(tolower(metric),pattern="mda")){ # Mean Decrease Accuracy
-    cutoff <- quantile(getImportance(m)[,3],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    cutoff <- quantile(importance(m)[,3],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+      cutoff <- cutoff/max(as.vector(importance(m)[,3]))
     importance <- as.vector(importance(m)[,3])/max(as.vector(importance(m)[,3]))
   } else if(grepl(tolower(metric),pattern="positive-class")){ # Importance for predicting 1
-    cutoff <- quantile(getImportance(m)[,2],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    cutoff <- quantile(importance(m)[,2],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+      cutoff <- cutoff/max(as.vector(importance(m)[,2]))
     importance <- as.vector(importance(m)[,2])/max(as.vector(importance(m)[,2]))
   } else if(grepl(tolower(metric),pattern="neg-class")){ # Importance for predicting 0
-    cutoff <- quantile(getImportance(m)[,1],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    cutoff <- quantile(importance(m)[,1],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+      cutoff <- cutoff/max(as.vector(importance(m)[,1]))
     importance <- as.vector(importance(m)[,1])/max(as.vector(importance(m)[,1]))
   }
   # plot a distribution of our scaled variable importance values? (useful for estimating cutoffs)
@@ -167,13 +170,13 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
   # Train a preliminary forest
 
   cat("## Preliminary Burn-in/Evaluative Forest ##")
-  rf.initial <- m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1500,do.trace=T)
+  rf.initial <- m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
   # Post-hoc QA check variable importance
   training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
 
   cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
-  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1500,do.trace=T)
-    rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=F)
+  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
+    rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=T)
 
   cat(" -- predicting across explanatory raster series for focal county:\n")
     r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables

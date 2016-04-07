@@ -46,16 +46,19 @@ getFinalVariablesUsed <- function(x){
       return(predictors)
 }
 
-getImportance <- function(m,metric="MDA",cutoff=NULL,plot=NULL){
+getImportance <- function(m,metric="MDA",cutoff=0.35,plot=NULL){
   n <- names(importance(m)[,3])
   if(grepl(tolower(metric),pattern="mda")){ # Mean Decrease Accuracy
-    cutoff <- quantile(getImportance(m)[,3],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    cutoff <- quantile(importance(m)[,3],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+      cutoff <- cutoff/max(as.vector(importance(m)[,3]))
     importance <- as.vector(importance(m)[,3])/max(as.vector(importance(m)[,3]))
   } else if(grepl(tolower(metric),pattern="positive-class")){ # Importance for predicting 1
-    cutoff <- quantile(getImportance(m)[,2],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    cutoff <- quantile(importance(m)[,2],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+      cutoff <- cutoff/max(as.vector(importance(m)[,2]))
     importance <- as.vector(importance(m)[,2])/max(as.vector(importance(m)[,2]))
   } else if(grepl(tolower(metric),pattern="neg-class")){ # Importance for predicting 0
-    cutoff <- quantile(getImportance(m)[,1],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+    cutoff <- quantile(importance(m)[,1],p=cutoff) # convert our cut-off to a quantile value consistent with the distribution of our metric
+      cutoff <- cutoff/max(as.vector(importance(m)[,1]))
     importance <- as.vector(importance(m)[,1])/max(as.vector(importance(m)[,1]))
   }
   # plot a distribution of our scaled variable importance values? (useful for estimating cutoffs)
@@ -74,8 +77,8 @@ applyToModelWorkspace <- function(x=NULL,fun=NULL,m="rf.initial"){
   require(randomForest)
   current_model_data <- new.env()
   # parse out our random forest model from the model session in the x= project directory
-  m <- list.files(x,pattern="_model.rdata",full.names=T)
-    load(m,envir=current_model_data)
+  M <- list.files(x,pattern="_model.rdata",full.names=T)
+    load(M,envir=current_model_data)
       m <- get(m,envir=current_model_data)
 
   return(fun(m))
@@ -93,7 +96,7 @@ hasSaturatedThickness <- function(x){
 zips <- list.files(pattern="7z$")
  zips <- zips[unlist(lapply(zips,zipHasModelObject))]
    zips <- lapply(zips,unpackModelSpace)
-q
+
 counties <- unlist(strsplit(unlist(zips),split="/"))
  counties <- counties[grepl(counties,pattern="focal")]
 
