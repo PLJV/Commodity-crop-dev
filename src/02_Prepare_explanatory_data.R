@@ -37,6 +37,10 @@ argv <- commandArgs(trailingOnly=T)
 # Local functions
 #
 
+set.tempdir <- function(path) {
+  invisible(.Call(C_setTempDir, path.expand(path)))
+}
+
 # climate variables to be calculated from Reihfeldt
 climate_variables <-
   c(
@@ -362,6 +366,8 @@ lWriteRaster <- function(x,y,cName=NULL){
 # MAIN
 #
 main <- function(){
+  dir.create("/home/ktaylora/tmp")
+  tempfile(tmpdir="/home/ktaylora/tmp")
   system("clear"); cat("## Commodity Crop Production Suitability Model (v.2.0) ##\n\n")
 
   # accept input data from the user demonstrating the extent of our study area

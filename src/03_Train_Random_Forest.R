@@ -150,12 +150,9 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
     expl_vars <- expl_vars[!grepl(expl_vars,pattern="farmed")]
       expl_vars <- lapply(expl_vars,FUN=raster)
         expl_vars <- raster::stack(expl_vars)
-  names <- names(expl_vars)
-    names <- unlist(strsplit(names,split="_"))
-      names <- names[!grepl(names,pattern="county|focal")]
-        names <- names[suppressWarnings(is.na(as.numeric(names)))]
-          names <- names[which(grepl(names(expl_vars),pattern=paste(names,collapse="|")))]
-            names(expl_vars) <- names
+  names <- vector();
+    for(i in strsplit(names(expl_vars),split="_")){ names[length(names)+1] <- i[4] }
+      names(expl_vars) <- names
   # extract across our training points
   training_pts_ <- try(training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),]) # the geometry of our SSURGO data can be limiting here...
     if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
@@ -176,7 +173,7 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
 
   cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
   m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
-    rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=T)
+    rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=F)
 
   cat(" -- predicting across explanatory raster series for focal county:\n")
     r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables
