@@ -1,13 +1,3 @@
-#
-# Post-hoc analysis: Identify counties where saturated thickness was an important explanatory variable and
-# determine the degree of importance (in terms of %RMSE explained).
-#
-
-require(parallel)
-require(raster)
-require(rgdal)
-require(rfUtilities)
-
 zipHasModelObject <- function(x){
   c <- paste("7za l ",  x,  sep  =  "")
     c <- system(command = c, intern = T)
@@ -103,24 +93,19 @@ hasSaturatedThickness <- function(x){
 # MAIN
 #
 
-
+require(rfUtilities)
 
 z <- list.files(pattern="7z$")
   z <- z[unlist(lapply(z,zipHasModelObject))]
 
-counties <- list()
+plots <- list()
 
 for(county in z){
   county <- unpackModelSpace(county)
   mod_importance <-applyToModelWorkspace(county,fun=importance,m="rf.final")
   if(hasSaturatedThickness(rownames(mod_importance))){
-    i <- mod_importance['satThick',2]/max(mod_importance[,2]) # importance relative to other variables considered in final model
-    county_id  <- as.numeric(unlist(strsplit(county,split = "_"))[3])
-    counties[[length(counties)+1]] <- data.frame(id=county_id,importance=i)
+    attach(loadModelWorkspace(county))
+    plots[[length(plots)+1]] <- rfUtilities::rf.partial.prob(rf.final, xname="satThick", pred.data=training_table, which.class=1, smooth=T, xlab="", ylab="",plot=F,main="")
+    detach(loadModelWorkspace(county))
   }
 }
-
-counties <- do.call(rbind,counties)
-
-# clean-up
-unlink(list.files("/tmp",pattern="focal_county",full.names=T),recursive=T,force=T)
