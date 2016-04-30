@@ -1,2 +1,2 @@
-# tillage-model
-Tillage Likelihood Model
+# commodity_crop_dev_suitability_model
+Commodity Crop Development Suitability Model
