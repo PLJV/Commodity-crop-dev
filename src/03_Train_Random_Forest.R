@@ -75,9 +75,13 @@ qaCheck_dropVarsWithAbundantNAs <- function(t){
 #
 qaCheck_checkBalancedClasses<- function(t,correct=F){
   t <- na.omit(t) # we will have to omit some records before training -- what will that do to our class balance?
-  ratio <- sum(t$response==0)/nrow(t)
-  if(ratio > 0.65 || ratio < 0.45) {
-    cat(" -- (warning) there's a fairly large class imbalance observed in the data. Reponse 0/1 : ",sum(t$response==0)/nrow(t),"\n",sep="")
+  min <- tabulate(t$response,nbins=6)
+    min <- min(min[min>0])
+  ratio <- tabulate(t$response,nbins=6)
+    ratio <- (ratio/min) - 1
+
+  if(sum(ratio > 0.65)) {
+    cat(" -- (warning) there's a fairly large class imbalance observed in the data (1,2,3,4,5,6): ",ratio, "\n",sep="")
   }
   if(correct){
     cat(" -- corrected by downsampling to less abundant class\n")
