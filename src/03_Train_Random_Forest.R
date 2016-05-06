@@ -75,9 +75,9 @@ qaCheck_dropVarsWithAbundantNAs <- function(t){
 #
 qaCheck_checkBalancedClasses<- function(t,correct=F){
   t <- na.omit(t) # we will have to omit some records before training -- what will that do to our class balance?
-  min <- tabulate(t$response,nbins=6)
+  min <- table(t$response)
     min <- min(min[min>0])
-  ratio <- tabulate(t$response,nbins=6)
+  ratio <- table(t$response)
     ratio <- (ratio/min) - 1
 
   if(sum(ratio > 0.65)) {
@@ -181,8 +181,8 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
 
   cat(" -- predicting across explanatory raster series for focal county:\n")
     r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables
-      r_predicted <- predict(r_projected,model=rf.final,progress='text',type='prob',na.rm=T,inf.rm=T,index=2) # index=2 specifies the "occurrence" (1) class from our forest
-
+      r_predicted <- predict(r_projected,model=rf.final,progress='text',type='prob',na.rm=T,inf.rm=T,index=which(as.numeric(rf.final$classes) %in% c(6,5,2,1))) # let's always try and predict corn, cotton, wheat, and grass for a focal county
+        names(r_predicted) <- rf.final$classes[which(as.numeric(rf.final$classes) %in% c(6,5,2,1))]
   cat(" -- saving results to disk\n")
   session <- new.env()
   assign("rf.initial",value=rf.initial,env=session)

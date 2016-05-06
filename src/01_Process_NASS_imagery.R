@@ -73,21 +73,24 @@ if(sum(grepl(list.files(pattern="shp"),pattern=paste(argv[2],"_farmed_binary_pts
   # to handle individual crop types and class balancing
   if(!file.exists(paste(argv[2],"_farmed_binary.tif",sep=""))){
     cat(" -- building cropped / not-cropped surfaces for majority crops in nass time-series: ")
-    grains <- c(29,24,27)          # lump our 'grains' -- winter wheat, millet, rye
-    grasses <- c(176)              # actual 'grass'
+          grains <- c(29,24,27)    # lump our 'grains' -- winter wheat, millet, rye
+    true_grasses <- c(176)         # actual 'grass'
     crop_grasses <- c(36,4)        # alfalfa and sorghum
-    corn   <- 1
-    cotton <- 2
-    beans <- c(5,42)
+            corn <- 1
+          cotton <- 2
+           beans <- c(5,42)
     for(i in 1:length(nassImagery)){
-      cat(".");r <- subs(nassImagery[[i]], y = data.frame(ori=grains,dst=c(1,1,1)), by = 1, which = 2, subsWithNA = F)
-      cat(".");r <- subs(nassImagery[[i]], y = data.frame(ori=crop_grasses,dst=c(2,2)), by = 1, which = 2, subsWithNA = F)
-      cat(".");r <- subs(nassImagery[[i]], y = data.frame(ori=beans,dst=c(3,3)), by = 1, which = 2, subsWithNA = F)
-      cat(".");r <- subs(nassImagery[[i]], y = data.frame(ori=corn,dst=4), by = 1, which = 2, subsWithNA = F)
-      cat(".");r <- subs(nassImagery[[i]], y = data.frame(ori=cotton,dst=5), by = 1, which = 2, subsWithNA = F)
-      cat(".");r <- subs(nassImagery[[i]], y = data.frame(ori=grasses,dst=6), by = 1, which = 2, subsWithNA = F)
-      cat(".");r[r>6] <- 0
-      cat(".");writeRaster(r,filename=gsub(names(nassImagery[[i]]),pattern="X",replacement="farmed_binary_"),format="GTiff",overwrite=T)
+      cat(".");r1 <- subs(nassImagery[[i]], y = data.frame(ori=grains,dst=c(1,1,1)), by = 1, which = 2, subsWithNA = T)
+      cat(".");r2 <- subs(nassImagery[[i]], y = data.frame(ori=crop_grasses,dst=c(2,2)), by = 1, which = 2, subsWithNA = T)
+      cat(".");r3 <- subs(nassImagery[[i]], y = data.frame(ori=corn,dst=4), by = 1, which = 2, subsWithNA = T)
+      cat(".");r4 <- subs(nassImagery[[i]], y = data.frame(ori=true_grasses,dst=6), by = 1, which = 2, subsWithNA = T)
+      cat(".");r5 <- subs(nassImagery[[i]], y = data.frame(ori=cotton,dst=5), by = 1, which = 2, subsWithNA = T)
+      cat(".");r6 <- subs(nassImagery[[i]], y = data.frame(ori=beans,dst=c(3,3)), by = 1, which = 2, subsWithNA = T)
+      cat(".");r  <- merge(r1,r2,r3,r4,r5,r6)
+      r[is.na(r)] <- 0
+        r <- crop(r,spTransform(b,CRS(projection(b))))
+          rm(r1, r2, r3, r4, r5, r6)
+      cat("."); writeRaster(r, filename = gsub(names(nassImagery[[i]]),pattern="X",replacement="farmed_binary_"),format="GTiff",overwrite=T)
       cat("+")
     }; cat("\n")
 
