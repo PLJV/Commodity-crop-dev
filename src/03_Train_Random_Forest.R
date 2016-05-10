@@ -1,5 +1,9 @@
 argv <- commandArgs(trailingOnly=T)
 
+# response classes for random forest
+classes <- data.frame(id=c(0,1,2,3,4,5,6),
+                      class=c("other","cereals","crop_grass","beans","corn","cotton","actual_grass"))
+
 include <- function(x,from="cran",repo=NULL){
   if(from == "cran"){
     if(!do.call(require,as.list(x))) install.packages(x, repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"));
@@ -177,12 +181,21 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
 
   cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
   m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
-    rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=qaCheck_findConvergence(m,chunkSize=10)*2,do.trace=F)
+  ntree <- qaCheck_findConvergence(m,chunkSize=10)*2
+  if(ntree<200){
+    dev.new()
+      plot(abs(diff(diff(m$err.rate[,1]))),type="l", xlab="N trees", ylab="2nd Deriv. OOB Error")
+        abline(v=ntree,col="red",lwd=1.1)
+    cat(" -- warning: ML estimator for convergence is predicting a small number of trees for convergence:",ntree,"-- adjusting to 200 trees\n")
+    ntree <- 200;
+  }
+
+  rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=ntree,do.trace=T)
 
   cat(" -- predicting across explanatory raster series for focal county:\n")
     r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables
-      r_predicted <- predict(r_projected,model=rf.final,progress='text',type='prob',na.rm=T,inf.rm=T,index=which(as.numeric(rf.final$classes) %in% c(6,5,2,1))) # let's always try and predict corn, cotton, wheat, and grass for a focal county
-        names(r_predicted) <- rf.final$classes[which(as.numeric(rf.final$classes) %in% c(6,5,2,1))]
+      r_predicted <- predict(r_projected,model=rf.final,progress='text',type='prob',na.rm=T,inf.rm=T,index=which(as.numeric(rf.final$classes) %in% c(6,5,4,2,1))) # let's always try and predict corn, cotton, wheat, and grass for a focal county
+        names(r_predicted) <- as.vector(classes$class[classes$id %in% as.numeric(rf.final$classes[which(as.numeric(rf.final$classes) %in% c(6,5,4,2,1))])])
   cat(" -- saving results to disk\n")
   session <- new.env()
   assign("rf.initial",value=rf.initial,env=session)
