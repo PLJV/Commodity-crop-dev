@@ -58,7 +58,7 @@ dropEmptyClasses <- function(r=NULL,rebalance=T){
   }
 }
 #
-# getLayerName()
+# parseLayerDsn()
 # 
 parseLayerDsn <- function(x=NULL){
   path <- unlist(strsplit(x, split="/"))
