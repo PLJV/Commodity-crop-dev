@@ -102,18 +102,26 @@ if(sum(grepl(list.files(pattern="shp"),pattern=paste(parseLayerDsn(argv[2])[1],"
           cotton <- 2
            beans <- c(5,42)
     for(i in 1:length(nassImagery)){
-      cat(".");r1 <- subs(nassImagery[[i]], y = data.frame(ori=grains,dst=c(1,1,1)), by = 1, which = 2, subsWithNA = T)
-      cat(".");r2 <- subs(nassImagery[[i]], y = data.frame(ori=crop_grasses,dst=c(2,2)), by = 1, which = 2, subsWithNA = T)
-      cat(".");r3 <- subs(nassImagery[[i]], y = data.frame(ori=corn,dst=4), by = 1, which = 2, subsWithNA = T)
-      cat(".");r4 <- subs(nassImagery[[i]], y = data.frame(ori=true_grasses,dst=6), by = 1, which = 2, subsWithNA = T)
-      cat(".");r5 <- subs(nassImagery[[i]], y = data.frame(ori=cotton,dst=5), by = 1, which = 2, subsWithNA = T)
-      cat(".");r6 <- subs(nassImagery[[i]], y = data.frame(ori=beans,dst=c(3,3)), by = 1, which = 2, subsWithNA = T)
-      cat(".");r  <- merge(r1,r2,r3,r4,r5,r6)
-      r[is.na(r)] <- 0
-        r <- crop(r,spTransform(b,CRS(projection(b))))
-          rm(r1, r2, r3, r4, r5, r6)
-      cat("."); writeRaster(r, filename = gsub(names(nassImagery[[i]]),pattern="X",replacement="farmed_binary_"),format="GTiff",overwrite=T)
-      cat("+")
+      fName <- paste(gsub(names(nassImagery[[i]]),pattern="X",replacement="farmed_binary_"),"tif",sep=".")
+      if(!file.exists(fName)){
+        cat(".");r1 <- try(subs(nassImagery[[i]], y = data.frame(ori=grains,dst=c(1,1,1)), by = 1, which = 2, subsWithNA = T))
+          if(class(r1) == "try-error") r1 <- nassImagery[[i]]*NA
+        cat(".");r2 <- try(subs(nassImagery[[i]], y = data.frame(ori=crop_grasses,dst=c(2,2)), by = 1, which = 2, subsWithNA = T))
+          if(class(r2) == "try-error") r2 <- nassImagery[[i]]*NA
+        cat(".");r3 <- try(subs(nassImagery[[i]], y = data.frame(ori=corn,dst=4), by = 1, which = 2, subsWithNA = T))
+          if(class(r3) == "try-error") r3 <- nassImagery[[i]]*NA
+        cat(".");r4 <- try(subs(nassImagery[[i]], y = data.frame(ori=true_grasses,dst=6), by = 1, which = 2, subsWithNA = T))
+          if(class(r4) == "try-error") r4 <- nassImagery[[i]]*NA
+        cat(".");r5 <- try(subs(nassImagery[[i]], y = data.frame(ori=cotton,dst=5), by = 1, which = 2, subsWithNA = T))
+          if(class(r5) == "try-error") r5 <- nassImagery[[i]]*NA
+        cat(".");r6 <- try(subs(nassImagery[[i]], y = data.frame(ori=beans,dst=c(3,3)), by = 1, which = 2, subsWithNA = T))
+          if(class(r6) == "try-error") r6 <- nassImagery[[i]]*NA
+        cat(".");r  <- merge(r1,r2,r3,r4,r5,r6)
+        r[is.na(r)] <- 0
+          r <- crop(r,spTransform(b,CRS(projection(b))))
+            rm(r1, r2, r3, r4, r5, r6)
+        cat("."); writeRaster(r, filename = fName,format="GTiff",overwrite=T)
+      }; cat("+");
     }; cat("\n")
 
     r <- stack(list.files(pattern="^farmed_")) # take the mode crop type across the time-series as representative of crop type for the given area
