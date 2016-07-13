@@ -58,6 +58,19 @@ dropEmptyClasses <- function(r=NULL,rebalance=T){
   }
 }
 #
+# readOGRfromPath()
+# 
+readOGRfromPath <- function(path=NULL){
+  include(rgdal)
+  path <- unlist(strsplit(path, split="/"))
+   
+  layer <- gsub(path[length(path)],pattern=".shp",replacement="")
+    dsn <- paste(path[1:(length(path)-1)],collapse="/")
+
+  return(readOGR(dsn,layer,verbose=F))
+}
+
+#
 # MAIN
 #
 
@@ -65,7 +78,7 @@ cat(" -- processing NASS imagery for focal county:",argv[2],"\n")
 
 if(sum(grepl(list.files(pattern="shp"),pattern=paste(argv[2],"_farmed_binary_pts",sep="")))==0){
   nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$",full.names=T),FUN=raster)
-            b <- spTransform(readOGR(".",argv[2],verbose=F),CRS(projection(nassImagery[[1]])))
+            b <- spTransform(readOGRfromPath(argv[2]),CRS(projection(nassImagery[[1]])))
 
   nassImagery <- lapply(nassImagery,FUN=raster::crop,b)
 
