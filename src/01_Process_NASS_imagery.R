@@ -58,14 +58,23 @@ dropEmptyClasses <- function(r=NULL,rebalance=T){
   }
 }
 #
+# getLayerName()
+# 
+parseLayerDsn <- function(x=NULL){
+  path <- unlist(strsplit(x, split="/"))
+    layer <- gsub(path[length(path)],pattern=".shp",replacement="")
+      dsn <- paste(path[1:(length(path)-1)],collapse="/")
+  return(c(layer,dsn))
+}
+#
 # readOGRfromPath()
 # 
 readOGRfromPath <- function(path=NULL){
   include('rgdal')
-  path <- unlist(strsplit(path, split="/"))
+  path <- parseLayerDsn(path)
    
-  layer <- gsub(path[length(path)],pattern=".shp",replacement="")
-    dsn <- paste(path[1:(length(path)-1)],collapse="/")
+  layer <- path[1]
+    dsn <- path[2]
 
   return(readOGR(dsn,layer,verbose=F))
 }
@@ -74,9 +83,9 @@ readOGRfromPath <- function(path=NULL){
 # MAIN
 #
 
-cat(" -- processing NASS imagery for focal county:",argv[2],"\n")
+cat(" -- processing NASS imagery for focal county:",parseLayerDsn(argv[2])[1],"\n")
 
-if(sum(grepl(list.files(pattern="shp"),pattern=paste(argv[2],"_farmed_binary_pts",sep="")))==0){
+if(sum(grepl(list.files(pattern="shp"),pattern=paste(parseLayerDsn(argv[2])[1],"_farmed_binary_pts",sep="")))==0){
   nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$",full.names=T),FUN=raster)
             b <- spTransform(readOGRfromPath(argv[2]),CRS(projection(nassImagery[[1]])))
 
@@ -84,7 +93,7 @@ if(sum(grepl(list.files(pattern="shp"),pattern=paste(argv[2],"_farmed_binary_pts
 
   # if we haven't built a farmed/not-farmed surface for the focal county, do it now. Eventually this will need to be parsed out
   # to handle individual crop types and class balancing
-  if(!file.exists(paste(argv[2],"_farmed_binary.tif",sep=""))){
+  if(!file.exists(paste(parseLayerDsn(argv[2])[1],"_farmed_binary.tif",sep=""))){
     cat(" -- building cropped / not-cropped surfaces for majority crops in nass time-series: ")
           grains <- c(29,24,27)    # lump our 'grains' -- winter wheat, millet, rye
     true_grasses <- c(176)         # actual 'grass'
@@ -110,11 +119,11 @@ if(sum(grepl(list.files(pattern="shp"),pattern=paste(argv[2],"_farmed_binary_pts
     r <- stack(list.files(pattern="^farmed_")) # take the mode crop type across the time-series as representative of crop type for the given area
       r <- raster::calc(r,fun=landscapeAnalysis::Mode)
 
-    writeRaster(r,filename=paste(argv[2],"_farmed_binary",sep=""),format="GTiff",overwrite=T)
+    writeRaster(r,filename=paste(parseLayerDsn(argv[2])[1],"_farmed_binary",sep=""),format="GTiff",overwrite=T)
       file.remove(list.files(pattern="^farmed_")) # clean-up
   }
 
   # Generate sample of points with balanced class sizes
   pts <- dropEmptyClasses(r)
-  rgdal::writeOGR(pts,".", paste(argv[2],"_farmed_binary_pts",sep=""), driver="ESRI Shapefile", overwrite=T)
+  rgdal::writeOGR(pts,".", paste(parseLayerDsn(argv[2])[1],"_farmed_binary_pts",sep=""), driver="ESRI Shapefile", overwrite=T)
 }
