@@ -61,7 +61,7 @@ dropEmptyClasses <- function(r=NULL,rebalance=T){
 # readOGRfromPath()
 # 
 readOGRfromPath <- function(path=NULL){
-  include(rgdal)
+  include('rgdal')
   path <- unlist(strsplit(path, split="/"))
    
   layer <- gsub(path[length(path)],pattern=".shp",replacement="")
