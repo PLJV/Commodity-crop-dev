@@ -458,10 +458,12 @@ main <- function(){
       projection(e) <- projection(s)
 
   # find an extent split that satisfies our project area extent
-  splits <- ceiling(gArea(spTransform(e,CRS(projection("+init=epsg:2163"))))/112969804) # using an arbitrary bounding box size from soildb that is known to work
-    splits <- ceiling(sqrt(splits))
+  splits <- ceiling(gArea(spTransform(e,CRS(projection("+init=epsg:2163"))))/677818824) # using an arbitrary bounding box size from soildb that is known to work
 
-  e <- splitExtent(extent(e),splits)
+  if(splits > 2){
+    splits <- ceiling(sqrt(splits))
+      e <- splitExtent(extent(e),splits)
+  }
 
   # calculate our SSURGO soil variables, as needed
   if(sum(grepl(list.files(pattern=paste(parseLayerDsn(argv[1])[1],".*.tif$",sep="")),pattern=paste(muaggatt_variables,collapse='|'))) < length(muaggatt_variables)){
