@@ -238,20 +238,20 @@ calcMultiplier_mapunitGeomFile <- function(x){
 #
 extentToSsurgoSpatialPolygons <- function(x, multiplier=NULL){
   sizeHeurstics = data.frame(area=NA,multiplier=NA)
-  
+
   # NRCS gateway sees input in NAD83 by default -- also, it will not return an intersect.  Rather, it takes all intersecting features completely within a bounding box.
   # Buffer the current extent to allow for some wiggle-room.  We will walk down our extent as needed, through heuristic optimization.
   if(is.null(multiplier)){
     e <- extentToSoilDBCoords(extent(spTransform(x,CRS(projection("+init=epsg:4269")))))
   } else {
     e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier)) # NRCS gateway sees input in NAD83 by default
-  
+
     sizeHeurstics[1,1] <- diff(c(e[1],e[3]))*diff(c(e[2],e[4])) # area of our bounding box in degrees^2
     sizeHeurstics[1,2] <- multiplier                            # multiplier constant applied for our initial step
   }
-  
+
   e <- try(mapunit_geom_by_ll_bbox(e))
-  
+
   if(class(e) == "try-error"){
     while(class(e) == "try-error" && nrow(sizeHeurstics)<20){ # if we can't do this in 20 steps, there's a real problem...
       cat("\n -- sleeping for 10 seconds to hobble our server requests\n")
@@ -263,7 +263,7 @@ extentToSsurgoSpatialPolygons <- function(x, multiplier=NULL){
       e <- try(mapunit_geom_by_ll_bbox(e));
     }
   }
-  
+
   if(class(e) == "try-error") stop("repeated failure trying to download units in BBOX for focal area")
 
   projection(e) <- CRS(projection("+init=epsg:4269"))
@@ -273,44 +273,44 @@ extentToSsurgoSpatialPolygons <- function(x, multiplier=NULL){
 # fetchSsurgoData()
 #
 fetchSsurgoData <- function(x,nCores=NULL){
-      # set-up a cluster for parallelization
-      if(is.null(nCores)){
-        parallel::detectCores()-2
-      }
-      cl <- makeCluster(nCores)
-      # fetch and rasterize some SSURGO data
-      focal_polygons <- extentToSsurgoSpatialPolygons(x)
-      # now get component and horizon-level data for these map unit keys
-      res <- unique(SDA_query(parseMuaggattTable(focal_polygons,muaggatt.vars=muaggatt_variables)))
-      # reclassify some of our categorical information into ordinal classes
-  
-      # merge to our shapefile
-      focal_polygons@data <- merge(focal_polygons@data,res,by="mukey")
-  
-      # convert our categorical variables to ordinal variables that are tractable for RandomForests
-      focal_polygons$flodfreqmax <- floodFrequencyToOrdinal(focal_polygons$flodfreqmax)
-      focal_polygons$drclassdcd  <- drainageToOrdinal(focal_polygons$drclassdcd)
-      focal_polygons$flodfreqdcd <- floodFrequencyToOrdinal(focal_polygons$flodfreqdcd)
-      focal_polygons$hydgrpdcd   <- hydgrpToOrdinal(focal_polygons$hydgrpdcd)
-  
-      # convert to rasters
-      cat(" -- cropping SSURGO vectors to the extent of the focal county\n")
-      focal_polygons <- spTransform(focal_polygons,CRS(projection(x)))
-        focal_polygons <- focal_polygons[names(focal_polygons)[!grepl(names(focal_polygons),pattern="mu|vers|area")]] # drop unnecessary variables
-            #focal_polygons <- raster::crop(focal_polygons,s)
-      cat(" -- generating gridded raster surfaces from SSURGO polygons\n")
-      out <- list(); # today, my brain can't make splitting a SpatialPolygons file by field into a list happen for some reason
-        for(i in 1:length(names(focal_polygons))){ out[[length(out)+1]] <- focal_polygons[,names(focal_polygons)[i]] }
-          f <- function(x,y=NULL,progress=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]),progress=progress)) }
-            out <- parLapply(cl,out,fun=f,progress=NULL)
-              out <- raster::stack(out)
-                names(out) <- names(focal_polygons)
-                
-      # clean-up
-      endCluster();
-      
-      # return list to user
-      return(out)
+  # set-up a cluster for parallelization
+  if(is.null(nCores)){
+    nCores <- parallel::detectCores()-1
+  }
+  cl <- makeCluster(nCores)
+  # fetch and rasterize some SSURGO data
+  focal_polygons <- extentToSsurgoSpatialPolygons(x)
+  # now get component and horizon-level data for these map unit keys
+  res <- unique(SDA_query(parseMuaggattTable(focal_polygons,muaggatt.vars=muaggatt_variables)))
+  # reclassify some of our categorical information into ordinal classes
+
+  # merge to our shapefile
+  focal_polygons@data <- merge(focal_polygons@data,res,by="mukey")
+
+  # convert our categorical variables to ordinal variables that are tractable for RandomForests
+  focal_polygons$flodfreqmax <- floodFrequencyToOrdinal(focal_polygons$flodfreqmax)
+  focal_polygons$drclassdcd  <- drainageToOrdinal(focal_polygons$drclassdcd)
+  focal_polygons$flodfreqdcd <- floodFrequencyToOrdinal(focal_polygons$flodfreqdcd)
+  focal_polygons$hydgrpdcd   <- hydgrpToOrdinal(focal_polygons$hydgrpdcd)
+
+  # convert to rasters
+  cat(" -- cropping SSURGO vectors to the extent of the focal county\n")
+  focal_polygons <- spTransform(focal_polygons,CRS(projection(x)))
+    focal_polygons <- focal_polygons[names(focal_polygons)[!grepl(names(focal_polygons),pattern="mu|vers|area")]] # drop unnecessary variables
+        #focal_polygons <- raster::crop(focal_polygons,s)
+  cat(" -- generating gridded raster surfaces from SSURGO polygons\n")
+  out <- list(); # today, my brain can't make splitting a SpatialPolygons file by field into a list happen for some reason
+    for(i in 1:length(names(focal_polygons))){ out[[length(out)+1]] <- focal_polygons[,names(focal_polygons)[i]] }
+      f <- function(x,y=NULL){ require(raster); return(rasterize(x[,1],raster(extent(x),res=30),update=T,field=names(x[,1]))) }
+        out <- parLapply(cl,out,fun=f)
+          out <- raster::stack(out)
+            names(out) <- names(focal_polygons)
+
+  # clean-up
+  endCluster();
+
+  # return list to user
+  return(out)
 }
 #
 # unpackClimateVars()
@@ -420,7 +420,7 @@ lWriteRaster <- function(x,y,cName=NULL){
 }
 #
 # parseLayerDsn()
-# 
+#
 parseLayerDsn <- function(x=NULL){
   path <- unlist(strsplit(x, split="/"))
     layer <- gsub(path[length(path)],pattern=".shp",replacement="")
@@ -429,11 +429,11 @@ parseLayerDsn <- function(x=NULL){
 }
 #
 # readOGRfromPath()
-# 
+#
 readOGRfromPath <- function(path=NULL){
   include('rgdal')
   path <- parseLayerDsn(path)
-   
+
   layer <- path[1]
     dsn <- path[2]
 
@@ -451,21 +451,22 @@ main <- function(){
 
   # accept input data from the user demonstrating the extent of our study area
   s <- readOGRfromPath(argv[1])
-  
+
   # calculate extent(s) for SSURGO fetches
   e <- extent(s)
     e <- as(e,'SpatialPolygons')
       projection(e) <- projection(s)
-      
+
   # find an extent split that satisfies our project area extent
   splits <- ceiling(gArea(spTransform(e,CRS(projection("+init=epsg:2163"))))/112969804) # using an arbitrary bounding box size from soildb that is known to work
     splits <- ceiling(sqrt(splits))
-  
+
   e <- splitExtent(extent(e),splits)
-  
+
   # calculate our SSURGO soil variables, as needed
   if(sum(grepl(list.files(pattern=paste(parseLayerDsn(argv[1])[1],".*.tif$",sep="")),pattern=paste(muaggatt_variables,collapse='|'))) < length(muaggatt_variables)){
     for(i in 1:length(e)){
+      cat(paste("[",i,"/",length(e),"]",sep=""))
       focal <- as(e[[i]],'SpatialPolygons')
         projection(focal) <- CRS(projection(s))
       e[[i]] <- fetchSsurgoData(focal)
@@ -480,7 +481,7 @@ main <- function(){
       ssurgo_variables <- out[grepl(out,pattern=paste(muaggatt_variables,collapse="|"))]
         ssurgo_variables <- lapply(ssurgo_variables,FUN=raster)
   }
-  
+
   # prepare our aquifer data
   if(!file.exists(paste(argv[1],"_satThick_10_14.tif",sep=""))){
     cat(" -- cropping, resampling, and snapping aquifer saturated thickness so that it is consistent with our SSURGO variables\n")
@@ -495,7 +496,7 @@ main <- function(){
     cat(" -- existing saturated thickness raster found for",argv[1],"; skipping generation and loading existing...\n")
     aquiferSatThickness <- raster(paste(argv[1],"_satThick_10_14.tif",sep=""))
   }
-  
+
   # prepare our climate data
   if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(climate_variables,collapse='|'))) < length(climate_variables)){
     # set-up a cluster for parallelization
