@@ -275,7 +275,7 @@ extentToSsurgoSpatialPolygons <- function(x, multiplier=NULL){
 fetchSsurgoData <- function(x,nCores=NULL){
   # set-up a cluster for parallelization
   if(is.null(nCores)){
-    nCores <- parallel::detectCores()-1
+    nCores <- parallel::detectCores()-3
   }
   cl <- makeCluster(nCores)
   # fetch and rasterize some SSURGO data
@@ -307,7 +307,15 @@ fetchSsurgoData <- function(x,nCores=NULL){
             names(out) <- names(focal_polygons)
 
   # clean-up
-  endCluster();
+  endCluster(); rm(cl);
+
+  # bug-fix  : sometimes ::parallel doesn't kill finished threads
+  pids <- system("ps aux", intern=T)
+  if(sum(grepl(pids, pattern="R --slave --no-restore -e parallel"))>=1){
+    pids <- pids[grep(pids, pattern="R --slave --no-restore -e parallel")]
+      pids <- unlist(lapply(strsplit(pids, split=" "), FUN=function(x){ return(x[2]) }))
+    system(paste("kill",paste(pids, collapse = " ")))
+  }
 
   # return list to user
   return(out)
