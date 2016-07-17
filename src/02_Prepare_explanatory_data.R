@@ -482,8 +482,8 @@ main <- function(){
       e[[i]] <- fetchSsurgoData(focal)
     }
     # merge and write list of rasters to disk
-    out <- do.call(raster::merge, e)
-      out <- raster::unstack(out)
+    out <- lMerge(list.files("ssurgo_pieces",pattern="tif$",full.names=T), method="gdal")
+      out <- raster::unstack(raster::stack("gdal_merge.tif"))
         lWriteRaster(out,y=muaggatt_variables,cName=parseLayerDsn(argv[1])[1])
   } else {
     cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
