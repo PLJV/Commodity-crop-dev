@@ -425,15 +425,18 @@ main <- function(){
 
   # calculate our SSURGO soil variables, as needed
   if(sum(grepl(list.files(pattern=paste(parseLayerDsn(argv[1])[1],".*.tif$",sep="")),pattern=paste(muaggatt_variables,collapse='|'))) < length(muaggatt_variables)){
-    for(i in 1:length(e)){
-      cat(paste("[",i,"/",length(e),"]",sep=""))
-      focal <- as(e[[i]],'SpatialPolygons')
-        projection(focal) <- CRS(projection(s))
-      e[[i]] <- fetchSsurgoData(focal)
+    pieces <- length(list.files("ssurgo_pieces",pattern="tif$"))
+    if(pieces<length(e)){
+      for(i in pieces:length(e)){
+        cat(paste("[",i,"/",length(e),"]",sep=""))
+        focal <- as(e[[i]],'SpatialPolygons')
+          projection(focal) <- CRS(projection(s))
+        e[[i]] <- fetchSsurgoData(focal)
+      }
     }
     # merge and write list of rasters to disk
     out <- lMerge(list.files("ssurgo_pieces",pattern="tif$",full.names=T), method="gdal")
-      out <- raster::unstack(raster::stack("gdal_merge.tif"))
+      out <- raster::unstack(raster::stack("gdal_merged.tif"))
         lWriteRaster(out,y=muaggatt_variables,cName=parseLayerDsn(argv[1])[1])
   } else {
     cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
