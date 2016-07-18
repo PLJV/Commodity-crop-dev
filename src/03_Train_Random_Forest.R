@@ -28,6 +28,13 @@ include('rfUtilities')
 # Local functions
 #
 
+parseLayerDsn <- function(x=NULL){
+  path <- unlist(strsplit(x, split="/"))
+    layer <- gsub(path[length(path)],pattern=".shp",replacement="")
+      dsn <- paste(path[1:(length(path)-1)],collapse="/")
+  return(c(layer,dsn))
+}
+
 #
 # getImportance
 # Detemine variable importance from a random forest object using methods outlines by (fill-in-with-M.Murphy citation here)
@@ -149,18 +156,17 @@ qaCheck_findConvergence <- function(m=NULL,chunkSize=100){
 #
 # MAIN
 #
-if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
+if(!file.exists(paste(parseLayerDsn(argv[1])[1],"_prob_occ.tif",sep=""))){
   cat(" -- training random forests\n")
   # read-in our training data
-  training_pts <- readOGR(".",paste(argv[1],"_farmed_binary_pts",sep=""),verbose=F)
+  training_pts <- readOGR(".",paste(parseLayerDsn(argv[1])[1],"_farmed_binary_pts",sep=""),verbose=F)
   # read-in our explanatory data
-  expl_vars <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
+  expl_vars <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
     expl_vars <- expl_vars[!grepl(expl_vars,pattern="farmed")]
       expl_vars <- lapply(expl_vars,FUN=raster)
         expl_vars <- raster::stack(expl_vars)
-  names <- vector();
-    for(i in strsplit(names(expl_vars),split="_")){ names[length(names)+1] <- i[4] }
-      names(expl_vars) <- names
+  names <- unlist(lapply(strsplit(names(expl_vars),split="_"),FUN=function(x){ x[length(x)] }))
+    names(expl_vars) <- names
   # extract across our training points
   training_pts_ <- try(training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),]) # the geometry of our SSURGO data can be limiting here...
     if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
@@ -205,8 +211,8 @@ if(!file.exists(paste(argv[1],"_prob_occ.tif",sep=""))){
     assign("training_pts",value=training_pts,env=session)
   assign("r_predicted",value=r_predicted,env=session)
 
-  writeRaster(r_predicted,paste(argv[1],"_prob_occ.tif",sep=""),overwrite=T)
-  save(list=ls(session),envir=session,file=paste(argv[1],"_model.rdata",sep=""),compress=T)
+  writeRaster(r_predicted,paste(parseLayerDsn(argv[1])[1],"_prob_occ.tif",sep=""),overwrite=T)
+  save(list=ls(session),envir=session,file=paste(parseLayerDsn(argv[1])[1],"_model.rdata",sep=""),compress=T)
 
   cat(" -- done\n")
 }
