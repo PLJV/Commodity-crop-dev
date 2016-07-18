@@ -208,63 +208,13 @@ getMapunitGeomFile <- function(){
   return(f[which(fTime == max(fTime))])
 }
 #
-# calcMultiplier_mapunitGeomFile()
-#
-# Accepts a file path to GML markup and parses the file for keywords consistent with errors
-# that we can use to optimize heuristics for further download attempts to find a good fit for the BBOX
-# parameter for the soils gateway.
-#
-calcMultiplier_mapunitGeomFile <- function(x){
-  o<-readLines(x)
-  if(length(o)==0){
-    cat(" -- received zero length for downloaded file. Probably just an oopsie. Check Internet connection/temporary file space.  Retrying.\n")
-    return(0)
-  } else if(grepl(tolower(o[length(o)-1]),pattern="thread was being aborted")){
-    cat(" -- download request aborted by gateway. Either the BBOX was too large or something happened to our network connection\n")
-    return(-0.001)
-  } else if(grepl(tolower(o[length(o)-1]),pattern="exceeds the limit of")){
-    cat(" -- download request exceeded server BBOX size limits\n")
-    return(-0.005)
-  } else if(grepl(tolower(o[length(o)-3]),pattern="null>missing<")){
-    cat(" -- download request contained null geometry. It's likely that BBOX was too small and didn't contain any polygons\n")
-    return(+0.005)
-  } else {
-    return(0)
-    cat(" -- unhandled error from mapunit_geom_by_ll_bbox; see:",x)
-  }
-}
-#
 # extentToSsurgoSpatialPolygons()
 #
-extentToSsurgoSpatialPolygons <- function(x, multiplier=NULL){
-  sizeHeurstics = data.frame(area=NA,multiplier=NA)
+extentToSsurgoSpatialPolygons <- function(x){
+  e <- extentToSoilDBCoords(extent(spTransform(x,CRS(projection("+init=epsg:4269")))))
+    e <- try(mapunit_geom_by_ll_bbox(e))
 
-  # NRCS gateway sees input in NAD83 by default -- also, it will not return an intersect.  Rather, it takes all intersecting features completely within a bounding box.
-  # Buffer the current extent to allow for some wiggle-room.  We will walk down our extent as needed, through heuristic optimization.
-  if(is.null(multiplier)){
-    e <- extentToSoilDBCoords(extent(spTransform(x,CRS(projection("+init=epsg:4269")))))
-  } else {
-    e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier)) # NRCS gateway sees input in NAD83 by default
-
-    sizeHeurstics[1,1] <- diff(c(e[1],e[3]))*diff(c(e[2],e[4])) # area of our bounding box in degrees^2
-    sizeHeurstics[1,2] <- multiplier                            # multiplier constant applied for our initial step
-  }
-
-  e <- try(mapunit_geom_by_ll_bbox(e))
-
-  if(class(e) == "try-error"){
-    while(class(e) == "try-error" && nrow(sizeHeurstics)<20){ # if we can't do this in 20 steps, there's a real problem...
-      cat("\n -- sleeping for 10 seconds to hobble our server requests\n")
-      Sys.sleep(10) # hobble by 10 second to give server a break and limit likelihood of race-conditions in temp file I/O
-      cat(" -- bounding-box heuristics optimizer, step:",nrow(sizeHeurstics),"\n\n")
-      multiplier <- multiplier + calcMultiplier_mapunitGeomFile(getMapunitGeomFile())
-      e <- extentToSoilDBCoords(multiplyExtent(extent(spTransform(x,CRS(projection("+init=epsg:4269")))),extentMultiplier=multiplier))
-        sizeHeurstics <- rbind(sizeHeurstics,data.frame(area=diff(c(e[1],e[3]))*diff(c(e[2],e[4])),multiplier=multiplier))
-      e <- try(mapunit_geom_by_ll_bbox(e));
-    }
-  }
-
-  if(class(e) == "try-error") stop("repeated failure trying to download units in BBOX for focal area")
+  if(class(e) == "try-error") stop("failure trying to download units in BBOX for focal area -- problem with the NRCS gateway or the extent of the project area specified by user.")
 
   projection(e) <- CRS(projection("+init=epsg:4269"))
     return(e)
@@ -275,7 +225,7 @@ extentToSsurgoSpatialPolygons <- function(x, multiplier=NULL){
 fetchSsurgoData <- function(x,nCores=NULL){
   # set-up a cluster for parallelization
   if(is.null(nCores)){
-    nCores <- parallel::detectCores()-3
+    nCores <- parallel::detectCores()-2
   }
   cl <- makeCluster(nCores)
   # fetch and rasterize some SSURGO data
