@@ -303,21 +303,23 @@ fetchClimateVariables <- function(){
 }
 #
 # fetchTopographicData()
-# wrapper function for FedData::get_ned()
+# wrapper function for FedData::get_ned().  If the user alternatively provides a path to a raster DEM (specified by dem=),
+# then use it to calculate our topographic variables.
 #
-fetchTopographicData <- function(x,useLocal=FALSE){
+fetchTopographicData <- function(x,dem=NULL){
   # parse list or individual raster object
-  if(useLocal){
-    return(lapply(topographic_variables,FUN=raster))
+  if(is.null(dem)){
+    # calculate from a live DEM we fetch from NED
+    if(!require(FedData)) stop("'fedData' package not available -- please install")
+    # clean-up any lurking temp file space.  Sometimes get_net doesn't do this all the way.
+    unlink("/tmp/1",recursive=T,force=T)
+      unlink("/tmp/dem",recursive=T,force=T)
+    x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T))
+      while(class(x_) == "try-error"){ x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T)) }
+        x <- x_; rm(x_)
+  } else {
+    x <- raster(dem)
   }
-  # calculate from a live DEM we fetch from NED
-  if(!require(FedData)) stop("'fedData' package not available -- please install")
-  # clean-up any lurking temp file space.  Sometimes get_net doesn't do this all the way.
-  unlink("/tmp/1",recursive=T,force=T)
-    unlink("/tmp/dem",recursive=T,force=T)
-  x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T))
-    while(class(x_) == "try-error"){ x_ <- try(get_ned(template=x,res="1",label="dem",extraction.dir="/tmp",raw.dir="/tmp",force.redo=T)) }
-      x <- x_; rm(x_)
   topo_output <- list()
     topo_output[[1]] <- x # elevation
     topo_output[[2]] <- raster::focal(x,w=matrix(1,nrow=3,ncol=3),fun=sd,na.rm=T) # StdDevElev (3x3)
@@ -332,7 +334,7 @@ fetchTopographicData <- function(x,useLocal=FALSE){
 # Ensure absolute consistency between raster objects by cropping,projecting,snapping,and (if asked) resampling
 # a raster object using a template
 #
-snapTo <- function(x,to=NULL,names=NULL,method='bilinear'){
+snapTo <- function(x,to=NULL,names=NULL,method='bilinear', nCores=NULL){
   require(parallel)
   # set-up a cluster for parallelization
   if(is.null(nCores)){
@@ -437,60 +439,71 @@ main <- function(){
     # merge and write list of rasters to disk
     out <- lMerge(list.files("ssurgo_pieces",pattern="tif$",full.names=T), method="gdal")
       out <- raster::unstack(raster::stack("gdal_merged.tif"))
-        lWriteRaster(out,y=muaggatt_variables,cName=parseLayerDsn(argv[1])[1])
+    if(class(try(lWriteRaster(out,y=muaggatt_variables,cName=parseLayerDsn(argv[1])[1])))!="try-error"){
+      file.remove("gdal_merged.tif")
+    } else {
+      stop("failed to parse stack of ssurgo variables from gdal_merged.tif into individual variables.")
+    }
   } else {
     cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
-    out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
+    out <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
       ssurgo_variables <- out[grepl(out,pattern=paste(muaggatt_variables,collapse="|"))]
         ssurgo_variables <- lapply(ssurgo_variables,FUN=raster)
   }
 
   # prepare our aquifer data
-  if(!file.exists(paste(argv[1],"_satThick_10_14.tif",sep=""))){
+  if(!file.exists(paste(parseLayerDsn(argv[1])[1],"_satThick_10_14.tif",sep=""))){
     cat(" -- cropping, resampling, and snapping aquifer saturated thickness so that it is consistent with our SSURGO variables\n")
     if(file.exists("satThick_10_14.tif")){
       aquiferSatThickness <- raster("satThick_10_14.tif")
         aquiferSatThickness <- snapTo(aquiferSatThickness,ssurgo_variables[[1]])
-          writeRaster(aquiferSatThickness,paste(argv[1],"_satThick_10_14.tif",sep=""),overwrite=T)
+          writeRaster(aquiferSatThickness,paste(parseLayerDsn(argv[1])[1],"_satThick_10_14.tif",sep=""),overwrite=T)
     } else {
       stop("couldn't find an appropriate saturated thickness raster in the CWD")
     }
   } else {
-    cat(" -- existing saturated thickness raster found for",argv[1],"; skipping generation and loading existing...\n")
-    aquiferSatThickness <- raster(paste(argv[1],"_satThick_10_14.tif",sep=""))
+    cat(" -- existing saturated thickness raster found for",parseLayerDsn(argv[1])[1],"; skipping generation and loading existing...\n")
+    aquiferSatThickness <- raster(paste(parseLayerDsn(argv[1])[1],"_satThick_10_14.tif",sep=""))
   }
 
   # prepare our climate data
-  if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(climate_variables,collapse='|'))) < length(climate_variables)){
+  if(sum(grepl(list.files(pattern=paste(parseLayerDsn(argv[1])[1],".*.tif$",sep="")),pattern=paste(climate_variables,collapse='|'))) < length(climate_variables)){
     # set-up a cluster for parallelization
-    cl <- makeCluster((parallel::detectCores()-4))
+    cl <- makeCluster((parallel::detectCores()-2))
     cat(" -- processing source climate data\n")
     names <- substr(climate_variables,1,nchar(climate_variables)-4)
     climate_variables <- fetchClimateVariables()
       # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
       climate_variables <- snapTo(climate_variables,ssurgo_variables[[1]])
-       lWriteRaster(climate_variables,y=names,cName=argv[1])
+       lWriteRaster(climate_variables,y=names,cName=parseLayerDsn(argv[1])[1])
     endCluster()
   } else {
-    cat(paste(" -- existing climate rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
-    out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
+    cat(paste(" -- existing climate rasters found for ",parseLayerDsn(argv[1])[1],"; skipping generation and loading existing...\n",sep=""))
+    out <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
       climate_variables <- out[grepl(out,pattern=paste(climate_variables,collapse="|"))]
         climate_variables <- lapply(climate_variables,FUN=raster)
   }
 
   # calculate our topographic landscape variables
-  if(sum(grepl(list.files(pattern=paste(argv[1],".*.tif$",sep="")),pattern=paste(topographic_variables,collapse='|'))) < length(topographic_variables)){
+  if(sum(grepl(list.files(pattern=paste(parseLayerDsn(argv[1])[1],".*.tif$",sep="")),pattern=paste(topographic_variables,collapse='|'))) < length(topographic_variables)){
     cat(" -- processing topographic data\n")
       names <- substr(topographic_variables,1,nchar(topographic_variables)-4)
       # fetch our topographic variables if they are not available locally
-      topographic_variables <- fetchTopographicData(ssurgo_variables[[1]],useLocal=F)
+      if(file.exists("elevation.tif")){
+        dem <- "elevation.tif"
+      } else {
+        dem <- NULL
+      }
+      topographic_variables <- fetchTopographicData(ssurgo_variables[[1]],
+                                                    dem=dem)
       # snap to the extent and resolution of our ssurgo variables
-      topographic_variables <- snapTo(topographic_variables,to=ssurgo_variables[[1]])
+      topographic_variables <- snapTo(topographic_variables,
+                                      to=ssurgo_variables[[1]])
       # write to disk
-      lWriteRaster(topographic_variables,y=names,cName=argv[1])
+      lWriteRaster(topographic_variables,y=names,cName=parseLayerDsn(argv[1])[1])
   } else {
-    cat(paste(" -- existing topographic rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
-    out <- list.files(pattern=paste("^",argv[1],".*.tif$",sep=""))
+    cat(paste(" -- existing topographic rasters found for ",parseLayerDsn(argv[1])[1],"; skipping generation and loading existing...\n",sep=""))
+    out <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
       topographic_variables <- out[grepl(out,pattern=paste(topographic_variables,collapse="|"))]
         topographic_variables <- lapply(topographic_variables,FUN=raster)
   }

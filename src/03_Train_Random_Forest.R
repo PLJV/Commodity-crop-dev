@@ -92,7 +92,7 @@ qaCheck_checkBalancedClasses<- function(t,correct=F){
     ratio <- (ratio/min) - 1
 
   if(sum(ratio > 0.65)) {
-    cat(" -- (warning) there's a fairly large class imbalance observed in the data (1,2,3,4,5,6): ",ratio, "\n",sep="")
+    cat(" -- (warning) there's a fairly large class imbalance observed in the data (1,2,3,4,5,6): ",paste(ratio,collapse=","), "\n",sep="")
   }
   if(correct){
     cat(" -- corrected by downsampling to less abundant class\n")
@@ -108,7 +108,7 @@ qaCheck_checkBalancedClasses<- function(t,correct=F){
 qaCheck_multiColinearity <- function(t){
   coVars <- suppressWarnings(rfUtilities::multi.collinear(t))
   if(length(coVars)>0){
-    cat(" -- (warning) dropped variables due to multicolinearity:",coVars,"\n",sep="")
+    cat(" -- (warning) dropped variables due to multicolinearity:",paste(coVars,collapse=","),"\n",sep="")
     t <- t[,!grepl(names(t),pattern=paste(coVars,collapse="|"))]
   }
   return(t)
@@ -117,7 +117,7 @@ qaCheck_multiColinearity <- function(t){
 #
 #
 qaCheck_dropVarsWithPoorExplanatoryPower <- function(m=NULL,t=NULL,p=0.35,plot=FALSE){
-  cat(" -- (warning) dropping uninformative variables :",
+  cat(" -- (warning) dropping uninformative variables :\n",
     paste(names(t)[!grepl(names(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))],"\n",sep=""))
   t <- cbind(response=t[,'response'],
              t[,grepl(names(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))])
@@ -163,12 +163,13 @@ if(!file.exists(paste(parseLayerDsn(argv[1])[1],"_prob_occ.tif",sep=""))){
   # read-in our explanatory data
   expl_vars <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
     expl_vars <- expl_vars[!grepl(expl_vars,pattern="farmed")]
-      expl_vars <- lapply(expl_vars,FUN=raster)
-        expl_vars <- raster::stack(expl_vars)
+      expl_vars <- raster::stack(expl_vars)
   names <- unlist(lapply(strsplit(names(expl_vars),split="_"),FUN=function(x){ x[length(x)] }))
     names(expl_vars) <- names
+  # Ensure a consistent CRS
+  training_pts <- spTransform(training_pts,CRS(projection(expl_vars)))
   # extract across our training points
-  training_pts_ <- try(training_pts[!is.na(extract(subset(expl_vars,subset='iccdcdpct'),training_pts)),]) # the geometry of our SSURGO data can be limiting here...
+  training_pts_ <- try(training_pts[!is.na(extract(subset(expl_vars,subset='X14'),training_pts)),]) # the geometry of our aquifer data can be limiting here...
     if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
       training_table <- extract(expl_vars,training_pts,df=T)
         training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
@@ -180,12 +181,12 @@ if(!file.exists(paste(parseLayerDsn(argv[1])[1],"_prob_occ.tif",sep=""))){
   training_table <- qaCheck_multiColinearity(training_table)
   # Train a preliminary forest
 
-  cat("## Preliminary Burn-in/Evaluative Forest ##")
+  cat("## Preliminary Burn-in/Evaluative Forest ##\n")
   rf.initial <- m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
   # Post-hoc QA check variable importance
   training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
 
-  cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model")
+  cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model\n")
   m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
   ntree <- qaCheck_findConvergence(m,chunkSize=10)*2
   if(ntree<200){
