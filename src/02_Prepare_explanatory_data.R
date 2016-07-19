@@ -469,14 +469,13 @@ main <- function(){
   # prepare our climate data
   if(sum(grepl(list.files(pattern=paste(parseLayerDsn(argv[1])[1],".*.tif$",sep="")),pattern=paste(climate_variables,collapse='|'))) < length(climate_variables)){
     # set-up a cluster for parallelization
-    cl <- makeCluster((parallel::detectCores()-2))
     cat(" -- processing source climate data\n")
     names <- substr(climate_variables,1,nchar(climate_variables)-4)
     climate_variables <- fetchClimateVariables()
-      # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
-      climate_variables <- snapTo(climate_variables,ssurgo_variables[[1]])
-       lWriteRaster(climate_variables,y=names,cName=parseLayerDsn(argv[1])[1])
-    endCluster()
+
+    # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
+    climate_variables <- snapTo(climate_variables,ssurgo_variables[[1]])
+      lWriteRaster(climate_variables,y=names,cName=parseLayerDsn(argv[1])[1])
   } else {
     cat(paste(" -- existing climate rasters found for ",parseLayerDsn(argv[1])[1],"; skipping generation and loading existing...\n",sep=""))
     out <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
