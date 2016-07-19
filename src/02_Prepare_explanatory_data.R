@@ -40,10 +40,6 @@ argv <- commandArgs(trailingOnly=T)
 # Local functions
 #
 
-set.tempdir <- function(path) {
-  invisible(.Call(C_setTempDir, path.expand(path)))
-}
-
 # climate variables to be calculated from Reihfeldt
 climate_variables <-
   c(
@@ -223,11 +219,13 @@ extentToSsurgoSpatialPolygons <- function(x){
 # fetchSsurgoData()
 #
 fetchSsurgoData <- function(x,nCores=NULL){
+  require(snow)
+  endCluster()
   # set-up a cluster for parallelization
   if(is.null(nCores)){
     nCores <- parallel::detectCores()-2
   }
-  cl <- makeCluster(nCores)
+  cl <- snow::makeCluster(nCores)
   # fetch and rasterize some SSURGO data
   focal_polygons <- extentToSsurgoSpatialPolygons(x)
   # now get component and horizon-level data for these map unit keys
@@ -255,9 +253,6 @@ fetchSsurgoData <- function(x,nCores=NULL){
         out <- parLapply(cl,out,fun=f)
           out <- raster::stack(out)
             names(out) <- names(focal_polygons)
-
-  # clean-up
-  endCluster(); rm(cl);
 
   # bug-fix  : sometimes ::parallel doesn't kill finished threads
   pids <- system("ps aux", intern=T)
@@ -335,19 +330,20 @@ fetchTopographicData <- function(x,dem=NULL){
 # a raster object using a template
 #
 snapTo <- function(x,to=NULL,names=NULL,method='bilinear', nCores=NULL){
-  require(parallel)
+  require(snow)
+  endCluster()
   # set-up a cluster for parallelization
   if(is.null(nCores)){
     nCores <- parallel::detectCores()-2
   }
-  cl <- makeCluster(nCores)
+  cl <- snow::makeCluster(nCores)
   # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
   if(grepl(tolower(class(x)),pattern="character")){ lapply(x,FUN=raster) }
   e <- as(extent(to[[1]]),'SpatialPolygons')
     projection(e) <- CRS(projection(to[[1]]))
   if(class(x) == "list") {
-    x <- parLapply(cl,x,fun=raster::crop,extent(spTransform(e,CRS(projection(x[[1]])))))
-      x <- parLapply(cl,x,fun=raster::projectRaster,crs=CRS(projection(to[[1]])))
+    x <- snow::parLapply(cl,x,fun=raster::crop,extent(spTransform(e,CRS(projection(x[[1]])))))
+      x <- snow::parLapply(cl,x,fun=raster::projectRaster,crs=CRS(projection(to[[1]])))
     extents <- lapply(x,alignExtent,to[[1]])
       for(i in 1:length(x)){ extent(x[[i]]) <- extents[[i]] }
     if(!is.null(method)){
@@ -362,7 +358,7 @@ snapTo <- function(x,to=NULL,names=NULL,method='bilinear', nCores=NULL){
       x <- raster::resample(x,y=to[[1]],method=method)
     }
   }
-  endCluster()
+
   return(x)
 }
 #
@@ -405,8 +401,6 @@ readOGRfromPath <- function(path=NULL){
 #
 
 main <- function(){
-  dir.create("/home/ktaylora/tmp")
-  tempfile(tmpdir="/home/ktaylora/tmp")
   system("clear"); cat("## Commodity Crop Production Suitability Model (v.2.0) ##\n\n")
 
   # accept input data from the user demonstrating the extent of our study area
@@ -438,7 +432,7 @@ main <- function(){
     }
     # merge and write list of rasters to disk
     out <- lMerge(paste("ssurgo_pieces/",
-                  1:length(list.files("ssurgo_pieces",pattern="tif")),".tif",sep=""), 
+                  1:length(list.files("ssurgo_pieces",pattern="tif")),".tif",sep=""),
                   method="gdal") # order matters for gdal_merge.py.  We want to make sure our pieces are touching
     out <- raster::unstack(raster::stack("gdal_merged.tif"))
     if(class(try(lWriteRaster(out,y=muaggatt_variables,cName=parseLayerDsn(argv[1])[1])))!="try-error"){
@@ -476,8 +470,9 @@ main <- function(){
     climate_variables <- fetchClimateVariables()
 
     # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
-    climate_variables <- snapTo(climate_variables,ssurgo_variables[[1]])
-      lWriteRaster(climate_variables,y=names,cName=parseLayerDsn(argv[1])[1])
+    out <- snapTo(climate_variables,ssurgo_variables[[1]])
+      lWriteRaster(out,y=names,cName=parseLayerDsn(argv[1])[1])
+        rm(out)
   } else {
     cat(paste(" -- existing climate rasters found for ",parseLayerDsn(argv[1])[1],"; skipping generation and loading existing...\n",sep=""))
     out <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
