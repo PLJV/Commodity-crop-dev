@@ -437,15 +437,17 @@ main <- function(){
       }
     }
     # merge and write list of rasters to disk
-    out <- lMerge(paste("ssurgo_pieces/",1:25,".tif",sep=""), method="gdal") # order matters for gdal_merge.py.  We want to make sure our pieces are touching
-      out <- raster::unstack(raster::stack("gdal_merged.tif"))
+    out <- lMerge(paste("ssurgo_pieces/",
+                  1:length(list.files("ssurgo_pieces",pattern="tif")),".tif",sep=""), 
+                  method="gdal") # order matters for gdal_merge.py.  We want to make sure our pieces are touching
+    out <- raster::unstack(raster::stack("gdal_merged.tif"))
     if(class(try(lWriteRaster(out,y=muaggatt_variables,cName=parseLayerDsn(argv[1])[1])))!="try-error"){
       file.remove("gdal_merged.tif")
     } else {
       stop("failed to parse stack of ssurgo variables from gdal_merged.tif into individual variables.")
     }
   } else {
-    cat(paste(" -- existing SSURGO rasters found for ",argv[1],"; skipping generation and loading existing...\n",sep=""))
+    cat(paste(" -- existing SSURGO rasters found for ",parseLayerDsn(argv[1])[1],"; skipping generation and loading existing...\n",sep=""))
     out <- list.files(pattern=paste("^",parseLayerDsn(argv[1])[1],".*.tif$",sep=""))
       ssurgo_variables <- out[grepl(out,pattern=paste(muaggatt_variables,collapse="|"))]
         ssurgo_variables <- lapply(ssurgo_variables,FUN=raster)
