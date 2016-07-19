@@ -437,7 +437,7 @@ main <- function(){
       }
     }
     # merge and write list of rasters to disk
-    out <- lMerge(list.files("ssurgo_pieces",pattern="tif$",full.names=T), method="gdal")
+    out <- lMerge(paste("ssurgo_pieces/",1:25,".tif",sep=""), method="gdal") # order matters for gdal_merge.py.  We want to make sure our pieces are touching
       out <- raster::unstack(raster::stack("gdal_merged.tif"))
     if(class(try(lWriteRaster(out,y=muaggatt_variables,cName=parseLayerDsn(argv[1])[1])))!="try-error"){
       file.remove("gdal_merged.tif")
