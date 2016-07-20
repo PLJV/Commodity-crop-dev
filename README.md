@@ -3,7 +3,7 @@ This is a (relatively) mature, 'R'-based modeling workflow for PLJV's commodity 
 
 PLJV uses crop suitability predictions for landscape change modeling in our biological planning (e.g., for Landscape Design), but this framework could be integrated into a number of planning frameworks, such as Strategic Habitat Conservation, Structured Decision Making, or Systematic Conservation Planning.  Or as a stand-alone product for a project. We are making it available publically in the hope that we can solicit feedback from biological 
 
-The workflow is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better.  This was developed for deployment on an Ubuntu instance of [https://aws.amazon.com/ec2/][AWS EC2]. 
+The workflow is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better.  This was developed for deployment on an Ubuntu instance of [https://aws.amazon.com/ec2/](AWS EC2). 
 
 # Usage (tl;dr)
 From bash:
