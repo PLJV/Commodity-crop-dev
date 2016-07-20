@@ -1,9 +1,9 @@
 # Commodity Crop Development Suitability Model
 This is a (relatively) mature, 'R'-based modeling workflow for PLJV's commodity crop development suitability model.  It accepts a project-area delineation (e.g., as a shapefile) and fetches/generates/processes crop data, climate data, topographic data and soil data thought to be limiting for crop production.  It uses observations of these environmental variables in areas where crops are grown to learn (via Random Forests) what these conditions look like in your project area.  You can then explore what these relationships look like in model space, or make predictions about suitability for certain crop-types in other geographies.  
 
-PLJV uses crop suitability predictions for landscape change predictions in our biological planning (e.g., for Landscape Design), but this framework could be integrated into a number of planning frameworks, such as Strategic Habitat Conservation, Structured Decision Making, or Systematic Conservation Planning.  We are making it available publically in the hope that we can solicit feedback from biological 
+PLJV uses crop suitability predictions for landscape change modeling in our biological planning (e.g., for Landscape Design), but this framework could be integrated into a number of planning frameworks, such as Strategic Habitat Conservation, Structured Decision Making, or Systematic Conservation Planning.  Or as a stand-alone product for a project. We are making it available publically in the hope that we can solicit feedback from biological 
 
-The workflow is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better.  This was developed for deployment on an Ubuntu instance of AWS EC2.  See: [https://aws.amazon.com/ec2/](https://aws.amazon.com/ec2/). 
+The workflow is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better.  This was developed for deployment on an Ubuntu instance of [https://aws.amazon.com/ec2/][AWS EC2]. 
 
 # Usage (tl;dr)
 From bash:
