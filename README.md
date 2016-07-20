@@ -8,9 +8,10 @@ The workflow is designed to work on any Unix environment with at least 30 GB of 
 # Usage (tl;dr)
 From bash:
 ``` bash
-R --no-save --vanilla --slave /path/to/project_shapefile.shp < 01_Process_NASS_imagery.R
-R --no-save --vanilla --slave /path/to/project_shapefile.shp < 02_Prepare_explanatory_data.R
-R --no-save --vanilla --slave /path/to/project_shapefile.shp < 03_Train_Random_Forest.R
+git clone https://github.com/PLJV/commodity_crop_dev_suitability_model.git
+R --no-save --vanilla --slave /path/to/project_shapefile.shp < src/01_Process_NASS_imagery.R
+R --no-save --vanilla --slave /path/to/project_shapefile.shp < src/02_Prepare_explanatory_data.R
+R --no-save --vanilla --slave /path/to/project_shapefile.shp < src/03_Train_Random_Forest.R
 ```
 # Speed Tweaks
 We have written the workflow to be as memory and CPU efficient as possible, taking advantage of as many cores and as much RAM as concievable when doing things like processing raster data or parallelizing certain operations.  That said, there are still things you can do to speed-up operation of the model-building workflow.
