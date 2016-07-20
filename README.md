@@ -1,2 +1,2 @@
-# commodity_crop_dev_suitability_model
-Commodity Crop Development Suitability Model
+# Commodity Crop Developmnet Suitability Model
+This is a (relatively) mature, 'R'-based modeling workflow for a commodity crop development suitability model.  It accepts a project-area delineation (e.g., as a shapefile) and fetches/generates/processes crop data, as well as climate, topographic and ecological variables thought to be limiting for crop production.  It uses observations of these environmental conditions in areas where crops are grown to learn (via Random Forests) what these conditions look like in your project area.  You can then explore what these relationships look like in model space, or make predictions about suitability for certain crop-types in other areas.
