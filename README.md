@@ -6,7 +6,7 @@ PLJV uses crop suitability predictions for landscape change modeling in our biol
 The workflow is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better. If you don't have one in your closet, it could be deployed pretty easily on an Ubuntu instance on [AWS EC2](https://aws.amazon.com/ec2/ "I'm fairly cheap"). 
 
 # Usage (tl;dr)
-From bash:
+From BASH:
 ``` bash
 git clone https://github.com/PLJV/commodity_crop_dev_suitability_model.git
 
