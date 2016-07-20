@@ -35,5 +35,8 @@ install.packages('FedData',repos=c("http://cran.revolutionanalytics.com","http:/
 require("devtools")
 install_github('ktaylora/landscapeAnalysis')
 ```
-## 2) Specify a pre-cropped DEM for your project area
+## 2) Specify a pre-cropped DEM for your project area at runtime
 Workflow (02) will automatically search for a DEM raster named elevation.tif in the current working directory to use to calculate topographic variables for your project area. If one isn't found, the workflow will attempt to use the 'fedData' package to fetch 30m DEM tiles from a (NED) USGS FTP server.  Fetching and mosaicing DEM tiles, even with tweaks in the 'landscapeAnalysis' package, can take time and is prone to problems (like USGS randomly taking their servers offline).  It's preferable to pre-crop your DEM to the extent of your project area so it's available for use at run-time, particularly if you are working across large geographies (e.g., multiple counties).
+
+## 3) Do not work over NFS/CIFS
+The 'R' interface for parallel computing does not behave well with file I/O if the files you are working with are stored in network filespace.  You will see strange node errors and generally experience slow performance when doing raster operations on large files.  Use local hard drive space.
