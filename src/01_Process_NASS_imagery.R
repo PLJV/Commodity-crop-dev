@@ -1,6 +1,5 @@
 #
-# Accepts two arguments: (1) is a directory path containing processed (GeoTIFF) NASS rasters
-# and (2) is a focal_county_NNNNN shapefile layer in the CWD.  This script is designed to be called from 00_
+# Accepts a single argument: (1) a shapefile layer delineating the focal project area
 #
 
 argv <- commandArgs(trailingOnly=T)
@@ -86,7 +85,7 @@ readOGRfromPath <- function(path=NULL){
 cat(" -- processing NASS imagery for focal county:",parseLayerDsn(argv[2])[1],"\n")
 
 if(sum(grepl(list.files(pattern="shp"),pattern=paste(parseLayerDsn(argv[2])[1],"_farmed_binary_pts",sep="")))==0){
-  nassImagery <- lapply(list.files(argv[1],pattern="cdls.*tif$",full.names=T),FUN=raster)
+  nassImagery <- lapply(list.files(pattern="cdls.*tif$",full.names=T),FUN=raster)
             b <- spTransform(readOGRfromPath(argv[2]),CRS(projection(nassImagery[[1]])))
 
   nassImagery <- lapply(nassImagery,FUN=raster::crop,b)
