@@ -4,7 +4,7 @@ This is a (relatively) mature, 'R'-based modeling workflow for a commodity crop 
 This is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better.  
 
 # Usage
-``` r
+``` bash
 R --no-save --vanilla --slave /path/to/project_shapefile.shp < 01_Process_NASS_imagery.R
 R --no-save --vanilla --slave /path/to/project_shapefile.shp < 02_Prepare_explanatory_data.R
 R --no-save --vanilla --slave /path/to/project_shapefile.shp < 03_Train_Random_Forest.R
