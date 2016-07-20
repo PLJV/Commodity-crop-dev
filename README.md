@@ -16,14 +16,15 @@ We have written the workflow to be as memory and CPU efficient as possible, taki
 ## 1) Pre-install 'R' package dependencies
 The workflow depends on a number of common 'R' packages used for spatial modeling in order to fetch explanatory data and train a model for your project area. You should pre-install these manually to ensure they are available:
 ``` r
-install.packages('devtools', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
-install.packages('rgdal', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
-install.packages('rgeos', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
-install.packages('raster', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
-install.packages('utils', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
-install.packages('soilDB', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
-install.packages('parallel', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
-install.packages('FedData', repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('devtools',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('rgdal',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('rgeos',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('raster',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('utils',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('soilDB',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('parallel',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+install.packages('FedData',repos=c("http://cran.revolutionanalytics.com","http://cran.us.r-project.org"))
+
 require("devtools")
 install_github('ktaylora/landscapeAnalysis')
 ```
