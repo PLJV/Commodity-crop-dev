@@ -3,7 +3,7 @@ This is a (relatively) mature, 'R'-based modeling workflow for PLJV's commodity 
 
 This is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better.  
 
-# Usage
+# Usage (TL;DR)
 From bash:
 ``` bash
 R --no-save --vanilla --slave /path/to/project_shapefile.shp < 01_Process_NASS_imagery.R
