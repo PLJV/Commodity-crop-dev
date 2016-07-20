@@ -4,6 +4,7 @@ This is a (relatively) mature, 'R'-based modeling workflow for PLJV's commodity 
 This is designed to work on any Unix environment with at least 30 GB of RAM available (for large raster operations).  The more CPU cores, the better.  
 
 # Usage
+From bash:
 ``` bash
 R --no-save --vanilla --slave /path/to/project_shapefile.shp < 01_Process_NASS_imagery.R
 R --no-save --vanilla --slave /path/to/project_shapefile.shp < 02_Prepare_explanatory_data.R
@@ -26,3 +27,5 @@ install.packages('FedData', repos=c("http://cran.revolutionanalytics.com","http:
 require("devtools")
 install_github('ktaylora/landscapeAnalysis')
 ```
+## 2) Specify a pre-cropped DEM for your project area
+Workflow 02 will automatically search for a DEM raster named elevation.tif in the current working directory to use to calculate topographic variables for your project area. If one isn't found, the workflow will attempt to use the 'fedData' package to fetch 30m DEM tiles from a (NED) USGS FTP server.  Fetching and mosaicing DEM tiles, even with tweaks in the 'landscapeAnalysis' package, can take time and is prone to problems (like USGS randomly taking their servers offline).  It's preferable to pre-crop your DEM to the extent of your project area.
