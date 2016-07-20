@@ -10,9 +10,9 @@ From bash:
 ``` bash
 git clone https://github.com/PLJV/commodity_crop_dev_suitability_model.git
 
-R --no-save --vanilla --slave /path/to/project_shapefile.shp < src/01_Process_NASS_imagery.R
-R --no-save --vanilla --slave /path/to/project_shapefile.shp < src/02_Prepare_explanatory_data.R
-R --no-save --vanilla --slave /path/to/project_shapefile.shp < src/03_Train_Random_Forest.R
+R --no-save --vanilla --slave --args /path/to/project_shapefile.shp < src/01_Process_NASS_imagery.R
+R --no-save --vanilla --slave --args /path/to/project_shapefile.shp < src/02_Prepare_explanatory_data.R
+R --no-save --vanilla --slave --args /path/to/project_shapefile.shp < src/03_Train_Random_Forest.R
 
 ls -lh project_shapefile*.tif
 ls -lh project_shapefile*.rdata
