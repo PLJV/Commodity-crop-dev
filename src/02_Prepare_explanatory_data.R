@@ -219,13 +219,13 @@ extentToSsurgoSpatialPolygons <- function(x){
 # fetchSsurgoData()
 #
 fetchSsurgoData <- function(x,nCores=NULL){
-  require(snow)
+  .include('parallel')
   endCluster()
   # set-up a cluster for parallelization
   if(is.null(nCores)){
     nCores <- parallel::detectCores()-2
   }
-  cl <- snow::makeCluster(nCores)
+  cl <- parallel::makeCluster(nCores)
   # fetch and rasterize some SSURGO data
   focal_polygons <- extentToSsurgoSpatialPolygons(x)
   # now get component and horizon-level data for these map unit keys
@@ -261,7 +261,7 @@ fetchSsurgoData <- function(x,nCores=NULL){
       pids <- unlist(lapply(strsplit(pids, split=" "), FUN=function(x){ return(x[2]) }))
     system(paste("kill",paste(pids, collapse = " ")))
   }
-
+  endCluster()
   # return list to user
   return(out)
 }
@@ -330,20 +330,20 @@ fetchTopographicData <- function(x,dem=NULL){
 # a raster object using a template
 #
 snapTo <- function(x,to=NULL,names=NULL,method='bilinear', nCores=NULL){
-  require(snow)
+  require(parallel)
   endCluster()
   # set-up a cluster for parallelization
   if(is.null(nCores)){
     nCores <- parallel::detectCores()-2
   }
-  cl <- snow::makeCluster(nCores)
+  cl <- parallel::makeCluster(nCores)
   # crop, reproject, and snap our raster to a resolution and projection consistent with the rest our explanatory data
   if(grepl(tolower(class(x)),pattern="character")){ lapply(x,FUN=raster) }
   e <- as(extent(to[[1]]),'SpatialPolygons')
     projection(e) <- CRS(projection(to[[1]]))
   if(class(x) == "list") {
-    x <- snow::parLapply(cl,x,fun=raster::crop,extent(spTransform(e,CRS(projection(x[[1]])))))
-      x <- snow::parLapply(cl,x,fun=raster::projectRaster,crs=CRS(projection(to[[1]])))
+    x <- parallel::parLapply(cl,x,fun=raster::crop,extent(spTransform(e,CRS(projection(x[[1]])))))
+      x <- parallel::parLapply(cl,x,fun=raster::projectRaster,crs=CRS(projection(to[[1]])))
     extents <- lapply(x,alignExtent,to[[1]])
       for(i in 1:length(x)){ extent(x[[i]]) <- extents[[i]] }
     if(!is.null(method)){
@@ -358,7 +358,7 @@ snapTo <- function(x,to=NULL,names=NULL,method='bilinear', nCores=NULL){
       x <- raster::resample(x,y=to[[1]],method=method)
     }
   }
-
+  endCluster()
   return(x)
 }
 #
