@@ -28,15 +28,44 @@ include('rfUtilities')
 # Local functions
 #
 
+#
+# parseLayerDsn()
+# parses a full system path into a layer name and partial path (DSN)
+# that can be used easily with readOGR() or for various other operations.
+#
 parseLayerDsn <- function(x=NULL){
   path <- unlist(strsplit(x, split="/"))
     layer <- gsub(path[length(path)],pattern=".shp",replacement="")
       dsn <- paste(path[1:(length(path)-1)],collapse="/")
   return(c(layer,dsn))
 }
-
 #
-# getImportance
+# memFree()
+# system independent approach to returning
+# amount of free memory in kilobytes
+#
+memFree <- function(){
+  platform <- Sys.info()['sysname']
+  if(grepl(tolower(platform),pattern="linux")){
+    t <- readLines("/proc/meminfo")
+      t <- t[grepl(t,pattern="MemFree")]
+        t <- unlist(strsplit(t,split= " "))
+
+    return(as.numeric(t[length(t)-1]))
+  }
+}
+projectObjectSize <- function(nrow=NULL, nVars=NULL, asPercentFreeMem=T){
+   dim <- rep(floor(sqrt(nrow*nVars)),2)
+  size <- object.size(data.frame(matrix(data=1:prod(dim), nrow=dim[1], ncol=dim[2])))
+
+  if(asPercentFreeMem){
+    return(as.numeric(size*0.001)/memFree())
+  } else {
+    return(size)
+  }
+}
+#
+# getImportance()
 # Detemine variable importance from a random forest object using methods outlines by (fill-in-with-M.Murphy citation here)
 #
 getImportance <- function(m,metric="MDA",cutoff=0.35,plot=NULL){
@@ -118,9 +147,9 @@ qaCheck_multiColinearity <- function(t){
 #
 qaCheck_dropVarsWithPoorExplanatoryPower <- function(m=NULL,t=NULL,p=0.35,plot=FALSE){
   cat(" -- (warning) dropping uninformative variables :\n",
-    paste(names(t)[!grepl(names(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))],"\n",sep=""))
+    paste(colnames(t)[!grepl(colnames(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))],"\n",sep=""))
   t <- cbind(response=t[,'response'],
-             t[,grepl(names(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))])
+             t[,grepl(colnames(t),pattern=paste(as.vector(getImportance(m,cutoff=p)[,1]),collapse="|"))])
   return(t)
 }
 #
@@ -168,36 +197,84 @@ if(!file.exists(paste(parseLayerDsn(argv[1])[1],"_prob_occ.tif",sep=""))){
     names(expl_vars) <- names
   # Ensure a consistent CRS
   training_pts <- spTransform(training_pts,CRS(projection(expl_vars)))
-  # extract across our training points
-  training_pts_ <- try(training_pts[!is.na(extract(subset(expl_vars,subset='X14'),training_pts)),]) # the geometry of our aquifer data can be limiting here...
-    if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
-      training_table <- extract(expl_vars,training_pts,df=T)
-        training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
-  # QA Check our training data
-  training_table$slope[is.na(training_table$slope)] <- 0
+  # do we have a cached table to work with?
+  if(file.exists("training_table_extract_cache.csv")){
+    cat(" -- using cached training table\n")
+    training_table <- bigmemory::read.big.matrix("training_table_extract_cache.csv",header=T)
+  } else {
+    # extract across our training points
+    training_pts_ <- try(training_pts[!is.na(extract(subset(expl_vars,subset='X14'),training_pts)),]) # the geometry of our aquifer data can be limiting here...
+      if(class(training_pts_) == "try-error") { rm(training_pts_) } else { training_pts <- training_pts_; rm(training_pts_) }
+    training_table <- extract(expl_vars,training_pts,df=T)
+      training_table <- cbind(data.frame(response=training_pts$response),training_table[,!grepl(names(training_table),pattern="ID$")])
+    # QA Check our training data
+    training_table$slope[is.na(training_table$slope)] <- 0
+    training_table <- qaCheck_dropVarsWithAbundantNAs(training_table)
+    training_table <- qaCheck_checkBalancedClasses(training_table)
+    training_table <- qaCheck_multiColinearity(training_table)
+    # if this is a large table, let's cache it to disk
+    if(nrow(training_table)>100000){
+      write.csv(training_table,"training_table_extract_cache.csv",row.names=F)
+    }
+  }
 
-  training_table <- qaCheck_dropVarsWithAbundantNAs(training_table)
-  training_table <- qaCheck_checkBalancedClasses(training_table)
-  training_table <- qaCheck_multiColinearity(training_table)
-  # Train a preliminary forest
+  # Use a 20% hold-out for validation -- we can easily spare this when working with big datasets
+  rows <- sample(1:nrow(training_table),size=round(0.2*nrow(training_table)))
+  holdout <- training_table[rows,]
+  training_table <- training_table[!(1:nrow(training_table) %in% rows),]
+
+  # Establish a multiple for downsampling and train an initial forest
+  multiple <- 25000/nrow(training_table) # determine a multiple for downsampling out dataset to realize 100,000 observations
+    if(multiple>1) {
+      multiple <- 1;
+      cat(" -- warning: sample space is sparse (fewer than 100,000 records). Will not bootstrap the training data.\n")
+    }
+
+  focal <- training_table[sample(1:nrow(training_table),size=round(multiple*nrow(training_table))),]
 
   cat("## Preliminary Burn-in/Evaluative Forest ##\n")
-  rf.initial <- m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
+  rf.initial <- m <- randomForest::randomForest(as.factor(response)~.,data=focal,importance=T,ntree=1000,do.trace=T)
+  # rf.initial <- m <- ranger::ranger(as.factor(response)~.,
+  #                                   num.tree=1000,
+  #                                   probability=T,
+  #                                   importance="impurity",
+  #                                   data=as.data.frame(focal),
+  #                                   num.threads=8,
+  #                                   classification=T,
+  #                                   write.forest=T)
   # Post-hoc QA check variable importance
   training_table <- qaCheck_dropVarsWithPoorExplanatoryPower(m,t=training_table)
 
-  cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model\n")
-  m <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=1000,do.trace=T)
-  ntree <- qaCheck_findConvergence(m,chunkSize=10)*2
-  if(ntree<200){
-    dev.new()
-      plot(abs(diff(diff(m$err.rate[,1]))),type="l", xlab="N trees", ylab="2nd Deriv. OOB Error")
-        abline(v=ntree,col="red",lwd=1.1)
-    cat(" -- warning: ML estimator for convergence is predicting a small number of trees for convergence:",ntree,"-- adjusting to 200 trees\n")
-    ntree <- 200;
+  # bootstrap our training data, if appropriate
+  if(round(1/multiple)>1){
+    nForests <- round((1/multiple)/3)
+    cat(paste(" -- bootstrap training ",nForests, " forests from ",nrow(training_table)," records\n",sep=""))
+    forests <- vector('list',nForests)
+    for(i in 1:nForests){
+      focal <- training_table[sample(1:nrow(training_table),size=round(multiple*nrow(training_table))),]
+          m <- randomForest(as.factor(response)~.,data=focal,importance=T,ntree=1000,do.trace=T)
+      ntree <- qaCheck_findConvergence(m,chunkSize=10)*4
+      forests[[i]] <- randomForest(as.factor(response)~.,data=focal,importance=T,ntree=ntree,do.trace=T)
+      cat(paste(" -- finished forest [",i,"/",nForests,"]\n"))
+    }
+    # merge our forests into a single random forest
+    cat(" -- merging forests\n")
+    rf.final <- do.call(randomForest::combine,forests)
+  } else { # for smaller datasets, don't bootstrap -- build a model based on what we have
+    cat(" -- re-training a final forest, optimizing based on 2X convergence of OOB error in the final model\n")
+    m <- randomForest(as.factor(response)~.,data=focal,importance=T,ntree=1000,do.trace=T)
+    ntree <- qaCheck_findConvergence(m,chunkSize=10)*2
+    if(ntree<200){
+      dev.new()
+        plot(abs(diff(diff(m$err.rate[,1]))),type="l", xlab="N trees", ylab="2nd Deriv. OOB Error")
+          abline(v=ntree,col="red",lwd=1.1)
+      cat(" -- warning: ML estimator for convergence is predicting a small number of trees for convergence:",ntree,"-- adjusting to 500 trees\n")
+      ntree <- 500;
+    }
+    cat(" -- training final random forest:\n")
+    rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=ntree,do.trace=T)
   }
-
-  rf.final <- randomForest(as.factor(response)~.,data=training_table,importance=T,ntree=ntree,do.trace=T)
+  cat(" -- ")
 
   cat(" -- predicting across explanatory raster series for focal county:\n")
     r_projected <- subset(expl_vars,subset=which(grepl(names(expl_vars),pattern=paste(names(training_table)[names(training_table)!="response"],collapse="|")))) # subset our original raster stack to only include our "keeper" variables
