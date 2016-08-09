@@ -42,3 +42,6 @@ Workflow (02) will automatically search for a DEM raster named elevation.tif in 
 
 ## 3) Do not work over NFS/CIFS
 The 'R' interface for parallel computing does not behave well with file I/O if the files you are working with are stored in network filespace.  You will see strange node errors and generally experience slow performance when doing raster operations on large files.  Use local hard drive space.
+
+# Acknowledgements
+This model borrows heavily from an early implementation by [Jeff Evans](http://evansmurphy.wix.com/evansspatial) (TNC). We have re-written it from scratch, with a number of improvements and additional functionality. But it probably wouldn't exist without early code-sharing by Jeff and others at TNC. 
